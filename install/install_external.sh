@@ -1,7 +1,9 @@
 #!/bin/bash
-# Download / build MMseqs2, NCBI BLAST+, and FASTA36 (ssearch36) into ../external_tools/
+# Download / build MMseqs2, NCBI BLAST+, and FASTA36 (ssearch36) into <sledge_dir>/external_tools/
 #
-# Usage: install_external.sh
+# Usage: install_external.sh <sledge_dir>
+#   sledge_dir  Root of the sledge tree (relative or absolute; stored internally as absolute).
+#
 # Optional environment overrides:
 #   MMSEQS_TAG=18-8cc5c          MMseqs2 release tag (GitHub)
 #   MMSEQS_ARCH=sse2|sse41|avx2  Prebuilt binary variant (default: sse2, widest CPU support)
@@ -11,13 +13,21 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SLEDGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+die() { echo "[install_external] ERROR: $*" >&2; exit 1; }
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <sledge_dir>" >&2
+  exit 2
+fi
+[[ -d "$1" ]] || die "not a directory: $1"
+SLEDGE_DIR="$(cd "$1" && pwd)"
+[[ -f "${SLEDGE_DIR}/Makefile" || -f "${SLEDGE_DIR}/install/install_external.sh" ]] \
+  || die "does not look like sledge root: ${SLEDGE_DIR}"
+
+# Must be absolute: after `cd` into fasta36/src, relative paths like ../external_tools break checks below.
 EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
 mkdir -p "${WORKDIR}"
-
-die() { echo "[install_external] ERROR: $*" >&2; exit 1; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
@@ -102,7 +112,8 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
     fi
   done
   [[ "${_built}" -eq 1 ]] || die "fasta36 build failed (tried linux64_sse2 / linux64 / linux_sse2 makefiles)"
-  [[ -x "${EXTERNAL}/fasta36/bin/ssearch36" ]] || die "ssearch36 not found after build: ${EXTERNAL}/fasta36/bin/ssearch36"
+  [[ -x "${EXTERNAL}/fasta36/bin/ssearch36" ]] \
+    || die "ssearch36 missing or not executable after build: ${EXTERNAL}/fasta36/bin/ssearch36"
   echo "[install_external] FASTA_DIR=${EXTERNAL}/fasta36/bin"
 else
   echo "[install_external] Skipping FASTA36 (SKIP_FASTA=1)"

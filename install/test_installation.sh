@@ -18,7 +18,7 @@ ARTIFACT_DIR="${INFO_DIR}/artifacts"
 
 mkdir -p "${INFO_DIR}" "${ARTIFACT_DIR}"
 
-TEST_FASTA="${ROOT_DIR}/test_fixed.fasta"
+TEST_FASTA="${ROOT_DIR}/test_db.fasta"
 
 AUTO_BUILD="${AUTO_BUILD:-0}"
 
@@ -33,6 +33,8 @@ SKIPPED=0
 
 # Paths for sledge_filter integration (pmbs pipeline).
 # Accept MMSEQS_BIN or MMSEQS (same for BLAST_DIR_*, FASTA_DIR_*). If unset and not on PATH, values are read from test_filter.config.
+# In test_filter.config, MMSEQS / BLAST_DIR / FASTA_DIR may be relative to SLEDGE_DIR (e.g. external_tools/mmseqs/bin/mmseqs).
+# sledge_filter runs with cwd under install/info/.../artifacts/...; relative paths would resolve there and fail. Expand to absolute paths before export.
 MMSEQS_BIN="${MMSEQS_BIN:-${MMSEQS:-}}"
 BLAST_DIR_BIN="${BLAST_DIR_BIN:-${BLAST_DIR:-}}"
 FASTA_DIR_BIN="${FASTA_DIR_BIN:-${FASTA_DIR:-}}"
@@ -46,10 +48,24 @@ load_filter_paths_from_config() {
   return 0
 }
 
-# Fill missing optional tool paths from test_filter.config.
+# If path is not absolute, treat it as relative to SLEDGE_DIR (matches shipped test_filter.config layout).
+abs_tool_path_from_sledge() {
+  local p="$1"
+  [[ -z "${p}" ]] && { echo ""; return; }
+  if [[ "${p}" == /* ]]; then
+    echo "${p}"
+  else
+    echo "${SLEDGE_DIR}/${p}"
+  fi
+}
+
+# Fill optional tool paths from test_filter.config, then make them cwd-independent for sledge_filter.
 load_filter_paths_from_config || true
-# run_test uses bash -lc; only exported vars are visible to write_filter_config_to inside the child shell.
-export MMSEQS_BIN BLAST_DIR_BIN FASTA_DIR_BIN PHMMER_FILTER_BIN ROOT_DIR
+MMSEQS_BIN="$(abs_tool_path_from_sledge "${MMSEQS_BIN}")"
+BLAST_DIR_BIN="$(abs_tool_path_from_sledge "${BLAST_DIR_BIN}")"
+FASTA_DIR_BIN="$(abs_tool_path_from_sledge "${FASTA_DIR_BIN}")"
+# run_test uses bash -lc; exported vars are visible to write_filter_config_to inside the child shell.
+export SLEDGE_DIR MMSEQS_BIN BLAST_DIR_BIN FASTA_DIR_BIN PHMMER_FILTER_BIN ROOT_DIR
 
 # Build a runnable config from test_filter.config with portable tool paths (keep in sync with test_filter.config).
 write_filter_config_to() {
@@ -375,13 +391,13 @@ run_test \
 run_test \
   "sledge_filter pipeline pmbs install integration" \
   0 \
-  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_db.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
+  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/blast_check && test -d filter_test/sw_check"
 
 run_test \
   "sledge_filter pipeline spm order" \
   0 \
-  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order spm --config ./ft.config --fixed-file '${ROOT_DIR}/test_db.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
+  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order spm --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/sw_check"
 
 run_test \
@@ -392,42 +408,42 @@ run_test \
 run_test \
   "sledge_filter missing config file" \
   1 \
-  "'${SLEDGE_FILTER_BIN}' --order pmbs --config ./does_not_exist_$$.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "'${SLEDGE_FILTER_BIN}' --order pmbs --config ./does_not_exist_$$.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter empty config missing OUT_DIR" \
   1 \
-  ": > empty.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./empty.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  ": > empty.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./empty.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter unknown order character" \
   1 \
-  "'${SLEDGE_FILTER_BIN}' --order pmxs --config ./irrelevant.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "'${SLEDGE_FILTER_BIN}' --order pmxs --config ./irrelevant.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter invalid REMOVE_TARGET in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter invalid SLEDGE_CORES in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^SLEDGE_CORES=.*/SLEDGE_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^SLEDGE_CORES=.*/SLEDGE_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter invalid SLEDGE_FILTER path in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's|^PHMMER_FILTER=.*|PHMMER_FILTER=\"/nonexistent/phmmer_filter\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's|^PHMMER_FILTER=.*|PHMMER_FILTER=\"/nonexistent/phmmer_filter\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter invalid MMSEQS path in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's|^MMSEQS=.*|MMSEQS=\"/nonexistent/mmseqs\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's|^MMSEQS=.*|MMSEQS=\"/nonexistent/mmseqs\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "sledge_filter invalid Z_SIZE in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^Z_SIZE=.*/Z_SIZE=\"0\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --db-file '${ROOT_DIR}/test_db.fasta' --fixed-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^Z_SIZE=.*/Z_SIZE=\"0\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 print_summary
 
