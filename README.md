@@ -49,7 +49,7 @@ Refer to the [external tools](#external-tools) section for installation through 
 
 ## Installation
 
-Clone the sledge repository:
+### 1) Clone and build core binaries
 
 ```bash
 git clone https://github.com/YOUR_ORG/sledge.git
@@ -71,19 +71,15 @@ Add `bin` to your `PATH` or call tools with full paths:
 export PATH="/path/to/sledge/bin:$PATH"
 ```
 
-**Installation check:** `install/test_installation.sh` tests the `sledge_splitter`, and `sledge_filter` pipeline (requires external tools MMSeqs2, BLAST, ssearch36 configured).
-
-```bash
-./install/test_installation.sh /path/to/sledge
-```
-
-### External tools
+### 2) Install external tools (MMseqs2, BLAST+, FASTA/ssearch36)
 
 Install external tools through the Makefile:
 
 ```bash
 make install-external
 ```
+
+### External tools
 
 This installs MMseqs2, BLAST+, and FASTA tools into `sledge/external_tools` by default.
 
@@ -108,6 +104,24 @@ On Windows, run the PowerShell entrypoint (WSL2-backed flow):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install\windows\install_external_windows.ps1 -SledgeDir C:\path\to\sledge
+```
+
+### 3) Run installation tests
+
+After building binaries and configuring/installing external tools:
+
+```bash
+make test-install
+```
+
+`make test-install` auto-detects OS:
+- Linux/macOS: runs `install/test_installation.sh`
+- Windows: routes to `install/windows/test_installation_windows.ps1` (WSL2-backed)
+
+Direct Windows entrypoint is still available if needed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install\windows\test_installation_windows.ps1 -SledgeDir C:\path\to\sledge
 ```
 
 ---

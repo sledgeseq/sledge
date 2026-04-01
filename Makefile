@@ -52,7 +52,7 @@ SLEDGE_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SLEDGE_SRCS))
 HMMER_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(HMMER_SRCS))
 EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
-.PHONY: all libs clean install-external
+.PHONY: all libs clean install-external test-install
 
 all: $(BIN)/sledge_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/sledge_filter
 
@@ -87,6 +87,14 @@ $(BUILD)/%.o: $(ROOT)/%.c
 
 install-external:
 	"$(ROOT)/install/install_external.sh" "$(ROOT)"
+
+ifeq ($(OS),Windows_NT)
+test-install:
+	powershell.exe -ExecutionPolicy Bypass -File "$(ROOT)/install/windows/test_installation_windows.ps1" -SledgeDir "$(ROOT)"
+else
+test-install:
+	bash "$(ROOT)/install/test_installation.sh" "$(ROOT)"
+endif
 
 clean:
 	rm -rf $(BUILD) $(BIN)
