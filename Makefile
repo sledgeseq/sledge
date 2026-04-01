@@ -4,9 +4,16 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 BUILD := $(ROOT)/build
 BIN := $(ROOT)/bin
 
-CC := gcc
-AR := ar
-RANLIB := ranlib
+UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
+OS ?= $(UNAME_S)
+EXE :=
+ifeq ($(OS),Windows_NT)
+  EXE := .exe
+endif
+
+CC ?= gcc
+AR ?= ar
+RANLIB ?= ranlib
 
 CFLAGS := -O3 -pthread
 CPPFLAGS := -DHAVE_CONFIG_H
@@ -45,9 +52,9 @@ SLEDGE_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SLEDGE_SRCS))
 HMMER_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(HMMER_SRCS))
 EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
-.PHONY: all libs clean
+.PHONY: all libs clean install-external
 
-all: $(BIN)/sledge_splitter $(BIN)/phmmer_filter $(BIN)/sledge_filter
+all: $(BIN)/sledge_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/sledge_filter
 
 libs: $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 
@@ -61,11 +68,11 @@ $(BUILD)/libeasel_min.a: $(EASEL_OBJS)
 	$(AR) rcs $@ $^
 	$(RANLIB) $@
 
-$(BIN)/sledge_splitter: $(BUILD)/src/sledge_splitter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+$(BIN)/sledge_splitter$(EXE): $(BUILD)/src/sledge_splitter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(BIN)/phmmer_filter: $(BUILD)/src/phmmer_filter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+$(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -77,6 +84,9 @@ $(BIN)/sledge_filter: $(ROOT)/src/sledge_filter.sh
 $(BUILD)/%.o: $(ROOT)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -c $< -o $@
+
+install-external:
+	"$(ROOT)/install/install_external.sh" "$(ROOT)"
 
 clean:
 	rm -rf $(BUILD) $(BIN)

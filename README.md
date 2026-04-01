@@ -1,6 +1,6 @@
 # Sledge
 
-Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
+Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`). Sledge is released under the MIT License (see [License](#license)).
 
 ## Citation
 
@@ -18,18 +18,32 @@ We would like to thank the developers of [HMMER3](http://hmmer.org) <sup><a href
 
 ---
 
+## OS support matrix
+
+| OS | Build support | `sledge_filter` support | External tools support | Notes |
+|----|---------------|-------------------------|------------------------|-------|
+| Linux (x86_64) | Official | Official | Official | Primary supported platform. |
+| macOS (Apple Silicon / Intel) | Official | Official | Official | Use Homebrew/system packages for dependencies. |
+| Windows (WSL2) | Official (via Linux in WSL2) | Official (via Bash in WSL2) | Official (via Linux in WSL2) | Recommended Windows path. |
+| Windows (native) | Planned | Planned | Planned | Not currently first-class; requires separate installers and shell adaptations. |
+
+---
+
 ## Requirements
 
-**Build (C binaries)**  
-GCC, GNU `make`, `pthread`, Bash and math (`-lm`).
+**Core build tools (all supported platforms)**  
+- C compiler (`gcc`/`clang`)
+- GNU `make`
+- `ar`, `ranlib`
+- Bash (for `sledge_filter` and install helpers)
+- `pthread` and math library (`-lm`)
 
-**Runtime — `sledge_filter` tool dependencies** 
-
+**Runtime dependencies for `sledge_filter`**  
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)
-- [NCBI BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
-- [FASTA package](https://github.com/wrpearson/fasta36) for the ssearch36 program
+- [NCBI BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/) (`makeblastdb`, `blastp`)
+- [FASTA package](https://github.com/wrpearson/fasta36) (`ssearch36`)
 
-Refer to the [external tools](#external-tools) section for additional information on installation and usage.
+Refer to the [external tools](#external-tools) section for installation through `make`.
 
 ---
 
@@ -65,7 +79,12 @@ export PATH="/path/to/sledge/bin:$PATH"
 
 ### External tools
 
-If you do not have these tools installed, run `install/install_external.sh`.  
+Install external tools through the Makefile:
+
+```bash
+make install-external
+```
+
 This installs MMseqs2, BLAST+, and FASTA tools into `sledge/external_tools` by default.
 
 If external tools are already installed, point `sledge_filter` to them in your config (see `install/test_filter.config`):
@@ -77,6 +96,19 @@ If external tools are already installed, point `sledge_filter` to them in your c
 | `FASTA_DIR` | Directory containing `ssearch36` |
 
 `sledge_filter` can also run on a subset of tools. Only the tools used in `--order` need to be installed.
+
+`make install-external` uses the cross-platform installer dispatcher under `install/`.
+You can still call the dispatcher directly if needed:
+
+```bash
+./install/install_external.sh /path/to/sledge
+```
+
+On Windows, run the PowerShell entrypoint (WSL2-backed flow):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install\windows\install_external_windows.ps1 -SledgeDir C:\path\to\sledge
+```
 
 ---
 
@@ -285,3 +317,9 @@ For sledge_filter pipeline behavior and defaults, read the comments at the top o
 ## References
 
 1. <a id="ref-eddy-2011"></a>Eddy SR (2011) Accelerated Profile HMM Searches. *PLOS Computational Biology* 7(10): e1002195. https://doi.org/10.1371/journal.pcbi.1002195
+
+---
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for the full text.
