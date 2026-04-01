@@ -169,13 +169,6 @@ if [[ "${NEED_MMSEQS}" -eq 1 ]]; then
     echo "MMSEQS is not executable or missing: ${MMSEQS}" >&2
     exit 1
   fi
-  _bc_exe="$(command -v bc 2>/dev/null || true)"
-  [[ -z "${_bc_exe}" && -x /usr/bin/bc ]] && _bc_exe=/usr/bin/bc
-  [[ -z "${_bc_exe}" && -x /bin/bc ]] && _bc_exe=/bin/bc
-  if [[ -z "${_bc_exe}" || ! -x "${_bc_exe}" ]]; then
-    echo "MMseqs step requires bc (not found on PATH or /usr/bin/bc, /bin/bc)" >&2
-    exit 1
-  fi
 fi
 if [[ "${NEED_BLAST}" -eq 1 ]]; then
   if [[ ! -d "${BLAST_DIR}" ]] || [[ ! -x "${BLAST_DIR}/makeblastdb" ]] || [[ ! -x "${BLAST_DIR}/blastp" ]]; then
@@ -241,6 +234,12 @@ remove_seqs_bash() {
       if (rec != "" && !(id in omit)) printf "%s\n", rec
     }
   ' "$input_fasta" > "$output_fasta"
+}
+
+# MMseqs per-direction e-value: E_VALUE * n_seqs / Z_SIZE (10 decimal places).
+# Uses POSIX awk only (no bc); same math as before.
+mmseqs_scaled_e() {
+  awk -v e="$1" -v n="$2" -v z="$3" 'BEGIN { printf "%.10f\n", e * n / z }'
 }
 
 # --- Exit if a tool's output FASTA has no sequences ---
@@ -327,8 +326,8 @@ run_mmseqs() {
 
     n_db=$(grep -c ">" "$mm_db_file" || true)
     n_fixed=$(grep -c ">" "$FIXED_FILE" || true)
-    e_db=$(echo "scale=10; $E_VALUE * $n_db / $Z_SIZE" | bc)
-    e_fixed=$(echo "scale=10; $E_VALUE * $n_fixed / $Z_SIZE" | bc)
+    e_db=$(mmseqs_scaled_e "$E_VALUE" "$n_db" "$Z_SIZE")
+    e_fixed=$(mmseqs_scaled_e "$E_VALUE" "$n_fixed" "$Z_SIZE")
 
     mkdir -p "${out_mm}/mm_db_${TASK_ID}" "${out_mm}/mm_fixed_${TASK_ID}" "${out_mm}/tmp_${TASK_ID}"
 

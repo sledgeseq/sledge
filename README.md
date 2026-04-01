@@ -100,6 +100,8 @@ You can still call the dispatcher directly if needed:
 ./install/install_external.sh /path/to/sledge
 ```
 
+**macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`) and builds FASTA36 from source. [Homebrew](https://brew.sh/) must be installed first; the script exits with a clear error if `brew` is not on your `PATH`.
+
 On Windows, run the PowerShell entrypoint (WSL2-backed flow):
 
 ```powershell

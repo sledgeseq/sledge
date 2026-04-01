@@ -20,8 +20,6 @@ mkdir -p "${INFO_DIR}" "${ARTIFACT_DIR}"
 
 TEST_FASTA="${ROOT_DIR}/test_db.fasta"
 
-AUTO_BUILD="${AUTO_BUILD:-0}"
-
 SPLITTER_BIN="${SLEDGE_DIR}/bin/sledge_splitter"
 PHMMER_FILTER_BIN="${SLEDGE_DIR}/bin/phmmer_filter"
 SLEDGE_FILTER_BIN="${SLEDGE_DIR}/bin/sledge_filter"
@@ -102,13 +100,6 @@ check_prereqs() {
   if [[ ! -f "${TEST_FASTA}" ]]; then
     echo "[FATAL] Missing test file: ${TEST_FASTA}"
     ok=1
-  fi
-  if [[ "${AUTO_BUILD}" -eq 1 ]]; then
-    echo "[INFO] Building sledge binaries to avoid stale executables..."
-    if ! make -C "${SLEDGE_DIR}" -f sledge_Makefile >/dev/null 2>&1; then
-      echo "[FATAL] Failed to build with sledge_Makefile"
-      ok=1
-    fi
   fi
   if [[ ! -x "${SPLITTER_BIN}" ]]; then
     echo "[FATAL] sledge_splitter not found/executable in bin/ or src/"

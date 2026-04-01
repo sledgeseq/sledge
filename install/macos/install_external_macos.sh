@@ -16,11 +16,14 @@ SLEDGE_DIR="$(cd "$1" && pwd)"
 [[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
 [[ "$(uname -s)" == "Darwin" ]] || die "this script is macOS-only"
 
+if ! command -v brew >/dev/null 2>&1; then
+  die "Homebrew (brew) is required for this installer. Install from https://brew.sh/ and ensure brew is on your PATH."
+fi
+
 EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
 mkdir -p "${WORKDIR}"
 
-need_cmd brew
 need_cmd git
 need_cmd make
 
