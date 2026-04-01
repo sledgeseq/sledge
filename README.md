@@ -1,0 +1,255 @@
+# Sledge
+
+Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
+
+To cite sledge, please use:
+insert the citation
+
+Link to the sledge paper - insert link
+
+---
+
+## Requirements
+
+**Build (C binaries)**  
+GCC, GNU `make`, `pthread`, Bash and math (`-lm`).
+
+**Runtime — `sledge_filter` tool dependencies** 
+
+- [MMseqs2](https://github.com/soedinglab/MMseqs2)
+- [NCBI BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
+- [FASTA package](https://github.com/wrpearson/fasta36) for the ssearch36 program
+
+---
+
+## Installation
+
+Clone the sledge repository:
+
+```bash
+git clone https://github.com/YOUR_ORG/sledge.git
+cd sledge/ # adjust if your repo root differs
+make
+```
+
+Executables land in `bin/`:
+
+| Binary | Role |
+|--------|------|
+| `sledge_splitter` | Profmark-style split of one FASTA DB into train / test / val |
+| `phmmer_filter` | Pairwise sequence similarity filter using HMMER |
+| `sledge_filter` | Shell pipeline: configurable order of p / m / b / s steps |
+
+Add `bin` to your `PATH` or call tools with full paths:
+
+```bash
+export PATH="/path/to/sledge/bin:$PATH"
+```
+
+**Installation check:** `install/test_installation.sh` tests the `sledge_splitter`, and `sledge_filter` pipeline (requires external tools MMSeqs2, BLAST, ssearch36 configured).
+
+```bash
+./install/test_installation.sh /path/to/sledge
+```
+
+---
+
+## Quick start
+
+**Splitter — one input DB, written train/test/val under the current directory**
+
+```bash
+sledge_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_dir results seqDB.fasta
+```
+
+**Multi-tool pipeline — order `pmbs` (pHMMER → MMseqs2 → BLAST → Smith–Waterman)**
+
+```bash
+sledge_filter --order pmbs --config pipeline.config --fixed-file test.fasta --db-file train_candidates.fasta
+```
+
+---
+
+## `sledge_splitter`
+
+### Required arguments
+
+| Argument | Description |
+|----------|-------------|
+| `<seqdb>` | One input protein sequence file (positional; must be last). |
+
+### Essential options (typical runs)
+
+| Option | Default | Description |
+|--------|---------|---------------|
+| `-o <prefix>` | `-` | Prefix for stats / summary output files (e.g. `stats` → `stats_0.txt`). |
+| `-Z <n>` | *inferred from database* | Effective database size for E-value calculation. |
+| `--cpu <n>` | `1` | Worker threads. |
+| `--dbblock <n>` | `1000` | Number of sequences in database. |
+| `--test_limit <n>` | `75000` | Stop once at least this many sequences are assigned to **test**. |
+| `--val_limit <n>` | `10000` | Stop once at least this many are assigned to **validation** (unless disabled). |
+| `--init_chunk <n>` | `10` | Sequences considered for assignment at one go |
+| `--disable_val` | off | Do not create a validation split. |
+| `--seed <n>` | `42` | RNG seed (`0` = one-time random seed). |
+| `--suppress` | off | Disable progress bar. |
+| `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.). |
+
+### Output paths
+
+| Option | Description |
+|--------|-------------|
+| `--output_dir <dir>` | Write `train`, `test`, `val`, `discard` under `<dir>` (with default basenames unless overridden). |
+| `--train_path`, `--test_path`, `--val_path`, `--discard_path` | Basename prefixes for the four FASTA streams (defaults: `train`, `test`, `val`, `discard`). |
+
+### Similarity / scoring (pHMMER-style)
+
+| Option | Description |
+|--------|-------------|
+| `-E <x>` | Treat hits with E-value ≤ `x` as significant. |
+| `--plow`, `--phigh` | PID window for accepting a sequence into the train/test/val set (see `-h` for interaction with the algorithm). |
+
+### Resume / debug
+
+| Option | Description |
+|--------|-------------|
+| `--load_tr`, `--load_te`, `--load_val` | Resume from existing train/test/val FASTA (`-` = none). |
+| `--halt <n>` | Process at most `n` sequences (debug). |
+| `--resume <n>` | Start after sequence index `n`. |
+| `--freq <n>` | Progress update frequency. |
+
+For complete set of options: run `sledge_splitter -h`.
+
+---
+
+## `sledge_filter` (pipeline script)
+
+### Required CLI arguments
+
+| Option | Description |
+|--------|-------------|
+| `--order <string>` | Tool order: `p` = pHMMER (`phmmer_filter`), `m` = MMseqs2, `b` = BLAST+, `s` = Smith–Waterman (`ssearch36`). Example: `pmbs`, `spm`. |
+| `--config <file>` | Bash-sourced config (see below). |
+| `--fixed-file <fasta>` | “Fixed” side (e.g. reference or test set). |
+| `--db-file <fasta>` | Database to filter against the fixed set. |
+
+### Optional CLI
+
+| Option | Description |
+|--------|-------------|
+| `--out-suffix <name>` | Suffix for per-tool output dirs (`phmmer_<suffix>`, …); defaults to `TASK_ID` from config. |
+
+### Config file (required variables)
+
+`OUT_DIR` must be set (base directory for outputs). Typically also set:
+
+| Variable | Role |
+|----------|------|
+| `PHMMER_FILTER` | Path to `phmmer_filter` binary. |
+| `MMSEQS` | MMseqs2 executable. |
+| `BLAST_DIR` | Directory containing `makeblastdb` and `blastp`. |
+| `FASTA_DIR` | Directory containing `ssearch36`. |
+| `TASK_ID` | Integer or `SLURM` (uses `SLURM_ARRAY_TASK_ID`). |
+| `REMOVE_TARGET` | `db` or `fixed` — which side sequences are removed from after hits. |
+| `E_VALUE` | E-value threshold (shared across tools where applicable). |
+| `Z_SIZE` | Positive integer; used for pHMMER / SW calibration. |
+| `SLEDGE_CORES`, `MMSEQS_CORES`, `BLAST_CORES`, `SW_CORES` | Thread counts for each tool. |
+| `BLAST_DBSIZE`, `BLAST_MAX_TARGET_SEQS`, `MMSEQS_MAX_SEQS` | BLAST / MMseqs2 tuning. |
+
+Optional: `KEEP_INTERMEDIATES`, `USE_LONG_ID`, etc. (see script header in `src/sledge_filter.sh`).
+
+**Minimal example config**
+
+```bash
+OUT_DIR="./filter_run_out"
+PHMMER_FILTER="/path/to/sledge_minimal/bin/phmmer_filter"
+MMSEQS="mmseqs"
+BLAST_DIR="/path/to/ncbi-blast/bin"
+FASTA_DIR="/path/to/fasta/bin"
+TASK_ID=0
+```
+
+---
+
+## `phmmer_filter`
+
+If you are not interested in using a suite of tools to filter and want to use just the optimized PHMMER filter for different functionalities, refer to the documentation below.
+
+### Required arguments
+
+| Argument | Description |
+|----------|-------------|
+| `<qdb>` | Query sequence database (first positional). |
+| `<tdb>` | Target sequence database (second positional). |
+
+One of `qdb` or `tdb` may be `-` (stdin), not both.
+
+### Essential options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o <prefix>` | `-` | Output prefix for result files. |
+| `-Z <n>` | *inferred from database by default* | Database size for E-value calibration. |
+| `-E <x>` | `10.0` | Reporting E-value threshold. |
+| `--cpu <n>` | `1` | Threads. |
+| `--qsize <n>` | `1` | Queries per thread per batch. |
+| `--qblock <n>` | `10` | Query block size. |
+| `--tblock <n>` | `1000` | Target block size. |
+| `--format <n>` | `1` | Output format (see below). |
+| `--all_hits` | off | Do not stop early on first failing comparison (when applicable). |
+| `--task_id <id>` | `0` | Shard id in output filenames. |
+| `--seed <n>` | `42` | RNG seed. |
+| `--suppress` | off | Disable progress bar. |
+
+### Output formats (`--format`)
+
+| Value | Meaning |
+|------|---------|
+| `0` | Per-sequence ACCEPT/REJECT string. |
+| `1` | Full information for rejected hits (default). |
+| `2` | IDs of accepted sequences. |
+| `3` | IDs of rejected queries. |
+| `4` | IDs of rejected targets (e.g. with `--all_hits`). |
+
+### Input formats
+
+`--qformat` / `--tformat` force Easel format names (e.g. `fasta`) and skip autodetection.
+
+---
+
+## Example use cases
+
+1. **Splitter — train/val/test from a single database**  
+   Build disjoint splits for benchmarking: tune `--test_limit`, `--val_limit`, `-Z`, and `--cpu` for large DBs.
+
+   ```bash
+   sledge_splitter -Z 1e6 --cpu 16 --test_limit 5000 --val_limit 1000 -o run stats_db.fasta
+   ```
+
+2. **Filter — large dissimilar training set given a fixed test set**  
+   Run `sledge_filter` with `REMOVE_TARGET=db` and strict `E_VALUE` / `Z_SIZE` so the “db” FASTA loses sequences similar to the test set (after pHMMER / MMseqs / BLAST / SW as ordered).
+
+3. **Filter — remove overlap between any two FASTA sets**  
+   Point `--fixed-file` and `--db-file` at the two pools; choose `REMOVE_TARGET` to drop hits from either side.
+
+4. **Splitter / filter — out-of-distribution (OOD) evaluation**  
+   Use the splitter to hold out a test set; use `sledge_filter` or `phmmer_filter` to strip training candidates that match the test set, giving a cleaner OOD evaluation. Alternatively, prune the test set with respect to the train set to get a subset of OOD sequences. You can also deduplicate a set of sequences by removing ones that have high sequence similarity to each other within a set (this would involve filtering a set with itself).
+
+5. **Strictness, order, and tool subset**  
+   - **Strictness:** lower `E_VALUE`, appropriate `Z_SIZE`, and `BLAST_DBSIZE` / MMseqs e-value scaling in the script.  
+   - **Order:** e.g. `p` only for fast homology removal; `pmbs` for a long cascade.  
+   - **Speed** MMSeqs2 is the fastest of the tools, followed by BLAST and PHMMER (our modified implementation) in similar order of magnitude. Smith-Waterman based filtering by ssearch is the slowest part of this process. User can choose the tools and order as required.
+   - **Subset:** omit letters (e.g. `pm` skips BLAST and SW).
+
+6. **Stratification / reporting**  
+   Use `phmmer_filter` `--format` modes and `-E` / `-Z` to export accept/reject IDs or full hit tables; combine with downstream scripts to bin by PID or E-value from the tabular output. Our customized pHMMER filter allows reporting results in different forms. We have not modified the source code of MMSeqs2, BLAST and ssearch36.
+
+---
+
+## Further help
+
+```bash
+sledge_splitter -h
+phmmer_filter -h
+```
+
+For sledge_filter pipeline behavior and defaults, read the comments at the top of `src/sledge_filter.sh`.
