@@ -1,0 +1,10 @@
+# Build artifacts and local binaries
+/bin/
+/build/
+/external_tools/
+
+# Test run logs and artifacts (see install/test_installation.sh)
+/install/info/
+
+# Local helper; not intended for the remote (use for bulk commits/pushes)
+/combo_commit.sh
