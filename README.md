@@ -1,11 +1,20 @@
 # Sledge
 
-Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
+### Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
 
-To cite sledge, please use:
-insert the citation
+## Citation
 
-Link to the sledge paper - insert link
+To cite Sledge, please use:
+
+> [SLEDGE_CITATION_PLACEHOLDER]
+>
+> [SLEDGE_PAPER_LINK_PLACEHOLDER]
+
+---
+
+## Acknowledgements
+
+We would like to thank the developers of [HMMER3](http://hmmer.org) <sup><a href="#ref-eddy-2011">1</a></sup> for the EASEL tools and base pHMMER pipeline that have been customized for `sledge_splitter` and `sledge_filter`.
 
 ---
 
@@ -253,3 +262,9 @@ phmmer_filter -h
 ```
 
 For sledge_filter pipeline behavior and defaults, read the comments at the top of `src/sledge_filter.sh`.
+
+---
+
+## References
+
+1. <a id="ref-eddy-2011"></a>Eddy SR (2011) Accelerated Profile HMM Searches. *PLOS Computational Biology* 7(10): e1002195. https://doi.org/10.1371/journal.pcbi.1002195
