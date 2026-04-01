@@ -1,6 +1,6 @@
 # Sledge
 
-### Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
+Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`).
 
 ## Citation
 
@@ -28,6 +28,8 @@ GCC, GNU `make`, `pthread`, Bash and math (`-lm`).
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)
 - [NCBI BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
 - [FASTA package](https://github.com/wrpearson/fasta36) for the ssearch36 program
+
+Refer to the [external tools](#external-tools) section for additional information on installation and usage.
 
 ---
 
@@ -60,6 +62,21 @@ export PATH="/path/to/sledge/bin:$PATH"
 ```bash
 ./install/test_installation.sh /path/to/sledge
 ```
+
+### External tools
+
+If you do not have these tools installed, run `install/install_external.sh`.  
+This installs MMseqs2, BLAST+, and FASTA tools into `sledge/external_tools` by default.
+
+If external tools are already installed, point `sledge_filter` to them in your config (see `install/test_filter.config`):
+
+| Config key | Set this to |
+|------------|-------------|
+| `MMSEQS` | Full path to `mmseqs` executable |
+| `BLAST_DIR` | Directory containing `makeblastdb` and `blastp` |
+| `FASTA_DIR` | Directory containing `ssearch36` |
+
+`sledge_filter` can also run on a subset of tools. Only the tools used in `--order` need to be installed.
 
 ---
 
