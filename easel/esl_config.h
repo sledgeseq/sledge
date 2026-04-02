@@ -52,7 +52,10 @@
 /* #undef HAVE_LIBGSL */
 
 /* Headers */
+/* <endian.h> is glibc/Linux; macOS/BSD lack it — esl_sqio_ncbi.c supplies htobe32 when unset. */
+#if defined(__linux__)
 #define HAVE_ENDIAN_H 1
+#endif
 #define HAVE_INTTYPES_H 1
 #define HAVE_STDINT_H 1
 #define HAVE_UNISTD_H 1
