@@ -16,6 +16,9 @@ SLEDGE_DIR="$(cd "$1" && pwd)"
 [[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
 [[ "$(uname -s)" == "Darwin" ]] || die "this script is macOS-only"
 
+INSTALL_MACOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FASTA36_PATCH="${INSTALL_MACOS_DIR}/../patches/fasta36-gcc-prototypes.patch"
+
 if ! command -v brew >/dev/null 2>&1; then
   die "Homebrew (brew) is required for this installer. Install from https://brew.sh/ and ensure brew is on your PATH."
 fi
@@ -26,6 +29,7 @@ mkdir -p "${WORKDIR}"
 
 need_cmd git
 need_cmd make
+need_cmd patch
 
 FASTA36_REF="${FASTA36_REF:-master}"
 FASTA36_REPO="https://github.com/wrpearson/fasta36.git"
@@ -56,6 +60,8 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   rm -rf "${fasta_src}" "${EXTERNAL}/fasta36-src"
   git clone --depth 1 --branch "${FASTA36_REF}" "${FASTA36_REPO}" "${fasta_src}" 2>/dev/null || git clone --depth 1 "${FASTA36_REPO}" "${fasta_src}"
   mv "${fasta_src}" "${EXTERNAL}/fasta36-src"
+  [[ -f "${FASTA36_PATCH}" ]] || die "missing patch file: ${FASTA36_PATCH}"
+  patch -d "${EXTERNAL}/fasta36-src" -p1 --forward <"${FASTA36_PATCH}" || die "fasta36 prototype patch failed"
 
   pushd "${EXTERNAL}/fasta36-src/src" >/dev/null
   built=0

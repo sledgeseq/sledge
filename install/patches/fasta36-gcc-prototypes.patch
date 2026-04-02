@@ -1,0 +1,27 @@
+--- a/src/altlib.h
++++ b/src/altlib.h
+@@ -85,7 +85,7 @@
+ extern int ncbl2_getliba(unsigned char *, int, char *, int, fseek_t *, int *,
+ 	    struct lmf_str *, long *);
+ extern void ncbl2_ranlib(char *, int, fseek_t, char *, struct lmf_str *);
+-void ncbl2_closelib();
++void ncbl2_closelib(struct lmf_str *);
+ #endif
+ 
+ #ifdef MYSQL_DB
+--- a/src/mmgetaa.c
++++ b/src/mmgetaa.c
+@@ -88,11 +88,11 @@
+ void vranlibm(char *, int cnt, fseek_t seek, char *libstr, struct lmf_str *m_fd);
+ int gcg_getlibm(unsigned char *seq, int maxs, char *libstr, int n_libstr, fseek_t *libpos, int *lcont, struct lmf_str *m_fd, long *l_off);
+ 
+-int (*getlibam[])()={
++int (*getlibam[])(unsigned char *, int, char *, int, fseek_t *, int *, struct lmf_str *, long *)={
+   agetlibm,lgetlibm, NULL, NULL,NULL,agetlibm,gcg_getlibm
+ };
+ 
+-void (*ranlibam[])()={
++void (*ranlibam[])(char *, int, fseek_t, char *, struct lmf_str *)={
+   aranlibm,lranlibm,NULL,NULL,NULL,vranlibm,vranlibm
+ };
+ #endif

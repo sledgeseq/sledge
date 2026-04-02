@@ -246,10 +246,11 @@ run_test \
    TRAIN_N=\$(count_fasta train_0.fasta); \
    TEST_N=\$(count_fasta test_0.fasta); \
    VAL_N=\$(count_fasta val_0.fasta); \
+   DISCARD_N=\$(count_fasta discard_0.fasta); \
    PROC_N=\$(awk '/^Processed:/ {print \$2}' stats_0.txt); \
    test \"\${TEST_N}\" -ge 20 && test \"\${VAL_N}\" -ge 10 && \
    test -n \"\${PROC_N}\" && test \"\${PROC_N}\" -le \"\${DB_N}\" && \
-   test \$((TRAIN_N + TEST_N + VAL_N)) -eq \"\${PROC_N}\""
+   test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 run_test \
   "splitter multi cpu multi init_chunk" \
@@ -259,10 +260,11 @@ run_test \
    TRAIN_N=\$(count_fasta train_0.fasta); \
    TEST_N=\$(count_fasta test_0.fasta); \
    VAL_N=\$(count_fasta val_0.fasta); \
+   DISCARD_N=\$(count_fasta discard_0.fasta); \
    PROC_N=\$(awk '/^Processed:/ {print \$2}' stats_0.txt); \
    test \"\${TEST_N}\" -ge 20 && test \"\${VAL_N}\" -ge 10 && \
    test -n \"\${PROC_N}\" && test \"\${PROC_N}\" -le \"\${DB_N}\" && \
-   test \$((TRAIN_N + TEST_N + VAL_N)) -eq \"\${PROC_N}\""
+   test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 run_test \
   "splitter test limit reached before val limit" \
@@ -272,22 +274,25 @@ run_test \
    TRAIN_N=\$(count_fasta train_0.fasta); \
    TEST_N=\$(count_fasta test_0.fasta); \
    VAL_N=\$(count_fasta val_0.fasta); \
+   DISCARD_N=\$(count_fasta discard_0.fasta); \
    PROC_N=\$(awk '/^Processed:/ {print \$2}' stats_0.txt); \
    test \"\${TEST_N}\" -ge 10 && test \"\${VAL_N}\" -ge 20 && \
    test -n \"\${PROC_N}\" && test \"\${PROC_N}\" -le \"\${DB_N}\" && \
-   test \$((TRAIN_N + TEST_N + VAL_N)) -eq \"\${PROC_N}\""
+   test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 run_test \
-  "splitter disable val mode" \
+  "splitter train test and val outputs" \
   0 \
-  "'${SPLITTER_BIN}' ${COMMON_SPLITTER} --disable_val --cpu 1 --dbblock 100 --init_chunk 4 --test_limit 25 -o stats '${TEST_FASTA}'" \
+  "'${SPLITTER_BIN}' ${COMMON_SPLITTER} --cpu 1 --dbblock 100 --init_chunk 4 --test_limit 25 --val_limit 5 -o stats '${TEST_FASTA}'" \
   "DB_N=\$(count_fasta '${TEST_FASTA}'); \
    TRAIN_N=\$(count_fasta train_0.fasta); \
    TEST_N=\$(count_fasta test_0.fasta); \
+   VAL_N=\$(count_fasta val_0.fasta); \
+   DISCARD_N=\$(count_fasta discard_0.fasta); \
    PROC_N=\$(awk '/^Processed:/ {print \$2}' stats_0.txt); \
-   test ! -f val_0.fasta && test \"\${TEST_N}\" -ge 25 && \
+   test -f val_0.fasta && test \"\${TEST_N}\" -ge 25 && test \"\${VAL_N}\" -ge 5 && \
    test -n \"\${PROC_N}\" && test \"\${PROC_N}\" -le \"\${DB_N}\" && \
-   test \$((TRAIN_N + TEST_N)) -eq \"\${PROC_N}\""
+   test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 run_test \
   "splitter invalid input path error handling" \
@@ -307,11 +312,12 @@ run_test \
    TRAIN_N=\$(count_fasta custom_out/mytrain_0.fasta); \
    TEST_N=\$(count_fasta custom_out/mytest_0.fasta); \
    VAL_N=\$(count_fasta custom_out/myval_0.fasta); \
+   DISCARD_N=\$(count_fasta custom_out/mydiscard_0.fasta); \
    PROC_N=\$(awk '/^Processed:/ {print \$2}' stats_0.txt); \
    test -f custom_out/mydiscard_0.fasta && \
    test \"\${TEST_N}\" -ge 20 && test \"\${VAL_N}\" -ge 10 && \
    test -n \"\${PROC_N}\" && test \"\${PROC_N}\" -le \"\${DB_N}\" && \
-   test \$((TRAIN_N + TEST_N + VAL_N)) -eq \"\${PROC_N}\""
+   test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 # ---------------------------
 # sledge_filter tests

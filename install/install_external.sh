@@ -4,6 +4,8 @@
 # Usage:
 #   install/install_external.sh <sledge_dir>
 #
+# FASTA36: patch(1) applies install/patches/fasta36-gcc-prototypes.patch (see README), then build.
+#
 # Routes to:
 #   install/linux/install_external_linux.sh
 #   install/macos/install_external_macos.sh

@@ -13,6 +13,9 @@ fi
 SLEDGE_DIR="$(cd "$1" && pwd)"
 [[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
 
+INSTALL_LINUX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FASTA36_PATCH="${INSTALL_LINUX_DIR}/../patches/fasta36-gcc-prototypes.patch"
+
 EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
 mkdir -p "${WORKDIR}"
@@ -35,6 +38,7 @@ fetch() {
 need_cmd tar
 need_cmd git
 need_cmd make
+need_cmd patch
 
 MMSEQS_TAG="${MMSEQS_TAG:-18-8cc5c}"
 MMSEQS_ARCH="${MMSEQS_ARCH:-sse2}"
@@ -76,6 +80,8 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   rm -rf "${fasta_src}" "${EXTERNAL}/fasta36"
   git clone --depth 1 --branch "${FASTA36_REF}" "${FASTA36_REPO}" "${fasta_src}" 2>/dev/null || git clone --depth 1 "${FASTA36_REPO}" "${fasta_src}"
   mv "${fasta_src}" "${EXTERNAL}/fasta36"
+  [[ -f "${FASTA36_PATCH}" ]] || die "missing patch file: ${FASTA36_PATCH}"
+  patch -d "${EXTERNAL}/fasta36" -p1 --forward <"${FASTA36_PATCH}" || die "fasta36 prototype patch failed"
   pushd "${EXTERNAL}/fasta36/src" >/dev/null
   built=0
   for mk in ../make/Makefile.linux64_sse2 ../make/Makefile.linux64 ../make/Makefile.linux_sse2; do
