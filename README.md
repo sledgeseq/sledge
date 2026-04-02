@@ -100,9 +100,7 @@ You can still call the dispatcher directly if needed:
 ./install/install_external.sh /path/to/sledge
 ```
 
-**FASTA36 build (Linux and macOS):** The installer clones [fasta36](https://github.com/wrpearson/fasta36) (default **`FASTA36_REF` is `master`**) and applies **`install/patches/fasta36-gcc-prototypes.patch`**. That patch updates **13** upstream sources under `src/` for modern GCC/clang: core headers and mmap readers (`altlib.h`, `mm_file.h`, `mmgetaa.c`), `pssm_asn_subs.c` (C23 `bool` and full `parse_pssm_*` prototypes), `lsim4.h` (`stdbool.h` instead of `typedef int bool`), `map_db.c` (typed function pointers for `get_entry` / `get_ent_arr`), fastx/tfastx drops (`dropfx2.c`, `dropfz3.c`: alignment helpers, `lx_band` `ckalloc`, `kssort`, `global` / `small_global` / `global_up` / `global_down` with `const` sequence pointers where appropriate, `fatal`), related drops (`dropfs2.c`, `dropff2.c`, `dropnfa.c`: old-style `kssort` / `kpsort` / `krsort` / `savemax` converted to ANSI prototypes), `initfa.c` (`sortbest` ANSI, `get_lambda` allocation split so `-Walloc-size-larger-than` does not misfire), and `compacc2e.c` (safe `calloc` count for annotation sorting; **`mktemp` → `mkstemp`** on UNIX for the temp library DB path). All of these are required together; a partial patch can still leave K&R-style declarations or C23 `bool` clashes. The patch file is **part of this repository**; the system **`patch`** command must still be on your `PATH` (common on Linux and macOS; minimal containers may need the `patch` package). The patch is generated against **`master`**; GitHub’s default branch may differ (e.g. a release branch with different line layouts), so if you set `FASTA36_REF` to another branch or tag and the patch fails, regenerate the diff from a clean checkout of that revision or use `master`. If upstream changes the patched lines on `master`, refresh the patch from a clean checkout.
-
-The patch **file** ships with sledge under `install/patches/`; only the **`patch` executable** is a system dependency. If you ever need to support hosts without `patch`, you could vendor a static GNU `patch` (for example under `install/bin/`) and call that from the installers—nothing in the repo does this yet.
+The [fasta36](https://github.com/wrpearson/fasta36) checkout used by the installer needs compatibility patches to build with current GCC and Clang; see [FASTA36 GCC patches](#fasta36-gcc-patches) near the end of this README.
 
 **macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`) and builds FASTA36 from source. [Homebrew](https://brew.sh/) must be installed first; the script exits with a clear error if `brew` is not on your `PATH`.
 
@@ -330,6 +328,38 @@ phmmer_filter -h
 ```
 
 For sledge_filter pipeline behavior and defaults, read the comments at the top of `src/sledge_filter.sh`.
+
+---
+
+## FASTA36 GCC patches
+
+Upstream [wrpearson/fasta36](https://github.com/wrpearson/fasta36) predates strict ISO C defaults and C23 keywords in recent compilers. Sledge ships a unified diff so the cloned sources compile cleanly on typical Linux and macOS toolchains.
+
+### Patch file and tooling
+
+| Item | Location / note |
+|------|-----------------|
+| Patch | `install/patches/fasta36-gcc-prototypes.patch` |
+| Applied by | Linux/macOS installers after `git clone` (see `install/linux/install_external_linux.sh`, `install/macos/install_external_macos.sh`) |
+| System dependency | The **`patch`** command must be on `PATH` (install the `patch` package on minimal images if needed). The patch *file* is part of this repo; only the `patch` binary is external. |
+
+### Scope (13 files under `src/`)
+
+Patches are **cumulative**: partial fixes (e.g. only mmap prototypes) are not enough. Grouped by theme:
+
+- **Headers / mmap:** `altlib.h`, `mm_file.h`, `mmgetaa.c` — correct prototypes and function-pointer types for library and mmap readers.
+- **C23 / syntax:** `pssm_asn_subs.c` — avoid the `bool` keyword clash; full `parse_pssm_*` prototypes. `lsim4.h` — `#include <stdbool.h>` instead of `typedef int bool`.
+- **Tool front-ends:** `map_db.c` — typed function pointers for `get_entry` / `get_ent_arr`. `initfa.c` — ANSI `sortbest`, safer `get_lambda` allocation. `compacc2e.c` — bounded `calloc` for annotation tables; on UNIX, `mktemp` replaced with `mkstemp` for the temp library DB path.
+- **FastA/FastX drops:** `dropfx2.c`, `dropfz3.c` — K&R-style forward declarations, `lx_band` / `ckalloc`, `kssort`, `global` / `small_global` / `global_up` / `global_down` (including `const` sequence pointers where needed), `fatal`. `dropfs2.c`, `dropff2.c`, `dropnfa.c` — ANSI prototypes for shell-sort helpers (`kssort`, `kpsort`, `krsort`) and `savemax` where applicable.
+
+### Branch and maintenance
+
+- Installers default to **`FASTA36_REF=master`** (see `install/install_external.sh`). The patch is generated against **`master`**. If GitHub’s default branch or your chosen tag diverges, line numbers may not match—regenerate the diff from a clean checkout of that revision, or use `master`.
+- If upstream edits the same lines on `master`, refresh the patch from a fresh clone and re-run the install build.
+
+### Hosts without `patch`
+
+Nothing in the repo vendors a `patch` binary today. For air-gapped or minimal hosts, you could ship a static GNU `patch` (e.g. under `install/bin/`) and invoke it from the installers.
 
 ---
 
