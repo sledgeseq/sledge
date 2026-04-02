@@ -165,7 +165,27 @@
  pro_dna(const unsigned char *prot_seq,	/* array with prot. seq. numbers*/
 --- a/src/dropfz3.c
 +++ b/src/dropfz3.c
-@@ -1595,11 +1595,22 @@
+@@ -1328,9 +1328,7 @@
+ }
+ 
+ void
+-kssort (v, n)
+-struct savestr *v[];
+-int     n;
++kssort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+@@ -1425,7 +1423,7 @@
+ 	    int width,         /* width for band alignment */
+ 	    struct f_struct *f_str)
+ {
+-  void *ckalloc();
++  void *ckalloc(size_t);
+   int i, j, bd, bd1, x1, x2, sp, p1=0, p2=0, end_prot;
+   struct sx_s *last, *tmp;
+   int sc, del, best = 0, cd,ci, e1, e2, e3, cd1, cd2, cd3, f, gg;
+@@ -1595,11 +1593,22 @@
  typedef struct { int i,j;} state;
  typedef state *state_ptr;
  
