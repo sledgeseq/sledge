@@ -16,12 +16,43 @@ SLEDGE_DIR="$(cd "$1" && pwd)"
 [[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
 [[ "$(uname -s)" == "Darwin" ]] || die "this script is macOS-only"
 
+MAC_ARCH="$(uname -m)"
+# Apple Silicon: try native darwin makefiles before x86_64/SSE4 variants.
+case "${MAC_ARCH}" in
+  arm64)
+    FASTA_MAKEFILES=(
+      ../make/Makefile.os_darwin
+      ../make/Makefile.macosx
+      ../make/Makefile.os_x86_64
+      ../make/Makefile.os_x86_64_sse4
+    )
+    ;;
+  x86_64|i386)
+    FASTA_MAKEFILES=(
+      ../make/Makefile.os_x86_64
+      ../make/Makefile.os_x86_64_sse4
+      ../make/Makefile.os_darwin
+      ../make/Makefile.macosx
+    )
+    ;;
+  *)
+    FASTA_MAKEFILES=(
+      ../make/Makefile.os_darwin
+      ../make/Makefile.macosx
+      ../make/Makefile.os_x86_64
+      ../make/Makefile.os_x86_64_sse4
+    )
+    ;;
+esac
+
 INSTALL_MACOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FASTA36_PATCH="${INSTALL_MACOS_DIR}/../patches/fasta36-gcc-prototypes.patch"
 
 if ! command -v brew >/dev/null 2>&1; then
   die "Homebrew (brew) is required for this installer. Install from https://brew.sh/ and ensure brew is on your PATH."
 fi
+
+echo "[install_external_macos] uname -m=${MAC_ARCH} (Homebrew installs native mmseqs2/blast for this arch)"
 
 EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
@@ -65,13 +96,17 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
 
   pushd "${EXTERNAL}/fasta36-src/src" >/dev/null
   built=0
-  for mk in ../make/Makefile.os_x86_64 ../make/Makefile.os_x86_64_sse4 ../make/Makefile.os_darwin ../make/Makefile.macosx; do
+  for mk in "${FASTA_MAKEFILES[@]}"; do
     if [[ -f "${mk}" ]]; then
-      make -f "${mk}" -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" all && built=1 && break
+      echo "[install_external_macos] FASTA36 trying ${mk}"
+      if make -f "${mk}" -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" all; then
+        built=1
+        break
+      fi
     fi
   done
   popd >/dev/null
-  [[ "${built}" -eq 1 ]] || die "fasta36 build failed for macOS"
+  [[ "${built}" -eq 1 ]] || die "fasta36 build failed for macOS (${MAC_ARCH})"
   [[ -x "${EXTERNAL}/fasta36-src/bin/ssearch36" ]] || die "ssearch36 missing after build"
   ln -sf "${EXTERNAL}/fasta36-src/bin/ssearch36" "${EXTERNAL}/fasta36/bin/ssearch36"
 fi
