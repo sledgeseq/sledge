@@ -26,6 +26,7 @@
 /* #undef eslENABLE_TSAN */
 
 /* Optional parallel implementation support */
+/* === SLEDGE_VECTOR_BEGIN === */
 #define eslENABLE_SSE 1
 /* #undef eslENABLE_SSE4 */
 /* #undef eslENABLE_AVX */
@@ -34,6 +35,7 @@
 /* #undef eslENABLE_VMX */
 
 /* #undef eslHAVE_NEON_AARCH64 */
+/* === SLEDGE_VECTOR_END === */
 
 /* #undef eslENABLE_CUDA */
 

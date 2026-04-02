@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# Detect CPU SIMD backend (SSE / NEON), rewrite p7_config.h + esl_config.h vector
+# sections, and emit build-config.mk for GNU make.
+#
+# Usage:
+#   ./configure [--with-impl=sse|neon|auto] [--help]
+#
+# Default --with-impl=auto uses uname -m (aarch64/arm64 -> neon, x86* -> sse).
+
+set -euo pipefail
+
+die() { echo "[configure] ERROR: $*" >&2; exit 1; }
+
+command -v awk >/dev/null 2>&1 || die "awk is required to run configure (POSIX awk is enough)."
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+WITH_IMPL="auto"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h)
+      cat <<'EOF'
+Usage: ./configure [--with-impl=sse|neon|auto]
+
+  --with-impl=auto   Detect from uname -m (default)
+  --with-impl=sse    Intel/AMD SSE2 implementation (impl_sse, esl_sse.c)
+  --with-impl=neon   ARM NEON implementation (impl_neon, esl_neon.c)
+
+Generates build-config.mk and updates vector macro blocks in:
+  src/p7_config.h
+  easel/esl_config.h
+(requires POSIX awk)
+
+Then run: make
+EOF
+      exit 0
+      ;;
+    --with-impl=*)
+      WITH_IMPL="${1#*=}"
+      shift
+      ;;
+    *)
+      die "unknown option: $1 (try --help)"
+      ;;
+  esac
+done
+
+machine="$(uname -m 2>/dev/null || echo unknown)"
+
+pick_impl() {
+  case "${WITH_IMPL}" in
+    auto)
+      case "${machine}" in
+        aarch64|arm64) echo neon ;;
+        x86_64|amd64|i386|i686|i86pc) echo sse ;;
+        *)
+          die "unsupported machine '${machine}' for --with-impl=auto. Set --with-impl=sse or --with-impl=neon explicitly."
+          ;;
+      esac
+      ;;
+    sse|neon) echo "${WITH_IMPL}" ;;
+    *) die "invalid --with-impl=${WITH_IMPL} (use sse, neon, or auto)" ;;
+  esac
+}
+
+IMPL="$(pick_impl)"
+
+if [[ ! -d "${ROOT}/src/impl_${IMPL}" ]]; then
+  die "missing ${ROOT}/src/impl_${IMPL} — copy impl_${IMPL} from hmmer-3.4/src before building."
+fi
+
+if [[ "${IMPL}" == neon && ! -f "${ROOT}/easel/esl_neon.c" ]]; then
+  die "missing easel/esl_neon.c — copy from hmmer-3.4/easel before building."
+fi
+if [[ "${IMPL}" == sse && ! -f "${ROOT}/easel/esl_sse.c" ]]; then
+  die "missing easel/esl_sse.c"
+fi
+
+# Compiler flags for SIMD translation units (impl_* + easel simd)
+SIMD_CFLAGS=""
+case "${IMPL}" in
+  sse)
+    # Match typical HMMER/gcc behavior; clang accepts -msse2 on x86.
+    SIMD_CFLAGS="-msse2"
+    ;;
+  neon)
+    case "${machine}" in
+      armv7*|armv6*|arm*)
+        SIMD_CFLAGS="-mfpu=neon"
+        ;;
+      *)
+        SIMD_CFLAGS=""
+        ;;
+    esac
+    ;;
+esac
+
+# Inner blocks (between SLEDGE_VECTOR markers, exclusive of marker lines)
+p7_inner_sse='/* #undef eslENABLE_NEON */
+#define eslENABLE_SSE 1
+/* #undef eslENABLE_VMX */'
+
+p7_inner_neon='#define eslENABLE_NEON 1
+/* #undef eslENABLE_SSE */
+/* #undef eslENABLE_VMX */'
+
+esl_inner_sse='#define eslENABLE_SSE 1
+/* #undef eslENABLE_SSE4 */
+/* #undef eslENABLE_AVX */
+/* #undef eslENABLE_AVX512 */
+/* #undef eslENABLE_NEON */
+/* #undef eslENABLE_VMX */
+
+/* #undef eslHAVE_NEON_AARCH64 */'
+
+if [[ "${IMPL}" == neon ]] && [[ "${machine}" == aarch64 || "${machine}" == arm64 ]]; then
+  esl_inner_neon='/* #undef eslENABLE_SSE */
+/* #undef eslENABLE_SSE4 */
+/* #undef eslENABLE_AVX */
+/* #undef eslENABLE_AVX512 */
+#define eslENABLE_NEON 1
+/* #undef eslENABLE_VMX */
+
+#define eslHAVE_NEON_AARCH64 1'
+else
+  esl_inner_neon='#define eslENABLE_NEON 1
+/* #undef eslENABLE_SSE */
+/* #undef eslENABLE_SSE4 */
+/* #undef eslENABLE_AVX */
+/* #undef eslENABLE_AVX512 */
+/* #undef eslENABLE_VMX */
+
+/* #undef eslHAVE_NEON_AARCH64 */'
+fi
+
+patch_vector_block() {
+  local file="$1"
+  local inner="$2"
+  local innerfile outfile
+  innerfile="${TMPDIR:-/tmp}/sledge_cfg_$$.inner"
+  outfile="${TMPDIR:-/tmp}/sledge_cfg_$$.out"
+  trap 'rm -f "$innerfile" "$outfile"' EXIT
+  printf '%s\n' "$inner" >"$innerfile" || die "failed to write temp file"
+
+  # POSIX awk: replace lines between markers (exclusive) with inner text; no Perl needed.
+  awk -v innerfile="$innerfile" '
+    BEGIN {
+      while ((getline line < innerfile) > 0)
+        inner = inner line "\n"
+      close(innerfile)
+    }
+    index($0, "/* === SLEDGE_VECTOR_BEGIN === */") {
+      print
+      printf "%s", inner
+      skipping = 1
+      next
+    }
+    skipping {
+      if (index($0, "/* === SLEDGE_VECTOR_END === */") > 0) {
+        print
+        skipping = 0
+      }
+      next
+    }
+    { print }
+  ' "$file" >"$outfile" || die "awk failed on ${file}"
+  mv "$outfile" "$file" || die "failed to install patched ${file}"
+  rm -f "$innerfile"
+  trap - EXIT
+}
+
+if [[ "${IMPL}" == sse ]]; then
+  patch_vector_block "${ROOT}/src/p7_config.h" "${p7_inner_sse}"
+  patch_vector_block "${ROOT}/easel/esl_config.h" "${esl_inner_sse}"
+  EASEL_SIMD_SRC="easel/esl_sse.c"
+else
+  patch_vector_block "${ROOT}/src/p7_config.h" "${p7_inner_neon}"
+  patch_vector_block "${ROOT}/easel/esl_config.h" "${esl_inner_neon}"
+  EASEL_SIMD_SRC="easel/esl_neon.c"
+fi
+
+# Same basenames as upstream impl_*/Makefile (excluding mpi.c — not used by sledge binaries)
+IMPL_CFILES="decoding.c fwdback.c io.c ssvfilter.c msvfilter.c null2.c optacc.c stotrace.c vitfilter.c p7_omx.c p7_oprofile.c"
+HMMER_IMPL_SRCS=""
+for f in ${IMPL_CFILES}; do
+  HMMER_IMPL_SRCS="${HMMER_IMPL_SRCS} src/impl_${IMPL}/${f}"
+done
+
+cat > "${ROOT}/build-config.mk" <<EOF
+# Generated by ./configure — do not edit.
+# Regenerate: ./configure
+
+IMPL_CHOICE := ${IMPL}
+IMPLDIR := impl_${IMPL}
+SIMD_CFLAGS := ${SIMD_CFLAGS}
+EASEL_SIMD_SRC := ${EASEL_SIMD_SRC}
+
+HMMER_IMPL_SRCS :=${HMMER_IMPL_SRCS}
+EOF
+
+echo "[configure] machine=${machine} impl=${IMPL} SIMD_CFLAGS='${SIMD_CFLAGS}'"
+echo "[configure] wrote ${ROOT}/build-config.mk"
+echo "[configure] updated vector blocks in src/p7_config.h and easel/esl_config.h"
+echo "[configure] Next: make"

@@ -54,8 +54,11 @@ Refer to the [external tools](#external-tools) section for installation through 
 ```bash
 git clone https://github.com/YOUR_ORG/sledge.git
 cd sledge/ # adjust if your repo root differs
+./configure   # detects CPU (SSE on x86_64, NEON on aarch64/arm64); writes build-config.mk
 make
 ```
+
+Re-run `./configure` after changing machines or if you want to force a backend (`./configure --with-impl=sse` or `--with-impl=neon`). `make distclean` removes `build-config.mk` as well as build products.
 
 Executables land in `bin/`:
 

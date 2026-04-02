@@ -114,9 +114,11 @@
 /* Choice of optimized implementation (one and only one must be set)
  * These are also identically defined in Easel esl_config.h.in
  */
+/* === SLEDGE_VECTOR_BEGIN === */
 /* #undef eslENABLE_NEON */
 #define eslENABLE_SSE 1
 /* #undef eslENABLE_VMX */
+/* === SLEDGE_VECTOR_END === */
 
 /* System headers
  */
