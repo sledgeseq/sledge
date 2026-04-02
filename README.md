@@ -111,7 +111,7 @@ You can still call the dispatcher directly if needed:
 
 The [fasta36](https://github.com/wrpearson/fasta36) checkout used by the installer needs compatibility patches to build with current GCC and Clang; see [FASTA36 GCC patches](#fasta36-gcc-patches) near the end of this README.
 
-**macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`, native for Intel vs Apple Silicon) and builds FASTA36 from source, choosing FASTA makefiles by **`uname -m`** (ARM Macs no longer prefer x86-only makefiles first). [Homebrew](https://brew.sh/) must be installed first; the script exits with a clear error if `brew` is not on your `PATH`.
+**macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`, native for Intel vs Apple Silicon) when available, and otherwise falls back to direct upstream tarball downloads (`mmseqs-osx-universal`, `ncbi-blast-<version>+-x64-macosx` by default). FASTA36 is built from source, choosing FASTA makefiles by **`uname -m`** (ARM Macs no longer prefer x86-only makefiles first). Optional overrides: `MMSEQS_TAG`, `MMSEQS_MACOS_ASSET`, `BLAST_VERSION`, `BLAST_PLATFORM`.
 
 On Windows, run the PowerShell entrypoint (WSL2-backed flow):
 
