@@ -9,11 +9,33 @@
  #endif
  
  #ifdef MYSQL_DB
+--- a/src/mm_file.h
++++ b/src/mm_file.h
+@@ -58,7 +58,7 @@
+ #include "defs.h"
+ #endif
+ 
+-extern unsigned long adler32();
++extern unsigned long adler32(unsigned long, const unsigned char *, unsigned int);
+ 
+ struct lmf_str {
+   FILE *libf;		/* sequence file being read */
 --- a/src/mmgetaa.c
 +++ b/src/mmgetaa.c
-@@ -88,11 +88,11 @@
- void vranlibm(char *, int cnt, fseek_t seek, char *libstr, struct lmf_str *m_fd);
- int gcg_getlibm(unsigned char *seq, int maxs, char *libstr, int n_libstr, fseek_t *libpos, int *lcont, struct lmf_str *m_fd, long *l_off);
+@@ -81,16 +81,18 @@
+ 
+ /* mmap()ed functions */
+ #ifdef USE_MMAP
+-int agetlibm(); void aranlibm();
+-int lgetlibm(); void lranlibm();
+-void vranlibm();
+-int gcg_getlibm();
++int agetlibm(unsigned char *, int, char *, int, fseek_t *, int *, struct lmf_str *, long *);
++void aranlibm(char *, int, fseek_t, char *, struct lmf_str *);
++int lgetlibm(unsigned char *, int, char *, int, fseek_t *, int *, struct lmf_str *, long *);
++void lranlibm(char *, int, fseek_t, char *, struct lmf_str *);
++void vranlibm(char *, int, fseek_t, char *, struct lmf_str *);
++int gcg_getlibm(unsigned char *, int, char *, int, fseek_t *, int *, struct lmf_str *, long *);
  
 -int (*getlibam[])()={
 +int (*getlibam[])(unsigned char *, int, char *, int, fseek_t *, int *, struct lmf_str *, long *)={
