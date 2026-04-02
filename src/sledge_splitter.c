@@ -100,7 +100,6 @@ static ESL_OPTIONS options[] = {
   { "--test_limit",   eslARG_INT,        "75000", NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of test sequences",                   12 },
   { "--val_limit",    eslARG_INT,        "10000", NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of validation sequences",             12 },
   { "--init_chunk",   eslARG_INT,        "10",    NULL, NULL,      NULL,  NULL,  NULL,              "query chunk size till test limit",                            12 },
-  { "--disable_val",   eslARG_NONE,      FALSE,   NULL, NULL,      NULL,  NULL,  NULL,              "create validation set toggle",                                12 },
   { "--suppress",     eslARG_NONE,       FALSE,   NULL, NULL,      NULL,  NULL,  NULL,              "turn off progress bar",                                       12 },
   { "--task_id",      eslARG_INT,        "0",     NULL, NULL,      NULL,  NULL,  NULL,              "slurm array task ID or shard number",                         12 },
   { "--shard_id",     eslARG_STRING,     "",      NULL, NULL,      NULL,  NULL,  NULL,              "second level shard number as a string",                       12 },
@@ -129,13 +128,15 @@ static ESL_OPTIONS options[] = {
 static char usage[]  = "[-options] <seqdb>";
 static char banner[] = "split a database into train, test and optional validation set";
 
-/* Resolve train/test/val/discard path prefixes: optional --output_dir with default basenames,
- * or explicit --train_path/--test_path/... overrides. */
+/* Resolve train/test/val/discard/stats path prefixes: optional --output_dir with default
+ * basenames, or explicit --train_path/--test_path/... overrides. When --output_dir is set,
+ * -o (stats) is placed under that directory unless -o is "-" (stdout). */
 static void
 resolve_output_paths(ESL_GETOPTS *go, SLEDGE_INFO *si)
 {
-  static char storage[4][4096];
+  static char storage[5][4096];
   const char *dir = NULL;
+  const char *o;
 
   if (esl_opt_IsOn(go, "--output_dir"))
     dir = esl_opt_GetString(go, "--output_dir");
@@ -164,11 +165,29 @@ resolve_output_paths(ESL_GETOPTS *go, SLEDGE_INFO *si)
     else
       snprintf(storage[3], sizeof(storage[3]), "%s", esl_opt_GetString(go, "--discard_path"));
     si->discard_path = storage[3];
+
+    o = esl_opt_GetString(go, "-o");
+    if (o != NULL && strcmp(o, "-") != 0) {
+      /* Keep stats under output_dir: absolute -o → basename only; relative paths with ".."
+       * → basename only so "../x" cannot escape the directory. */
+      int strip_to_basename = (o[0] == '/' || strstr(o, "..") != NULL);
+      if (strip_to_basename) {
+        const char *slash = strrchr(o, '/');
+        const char *name  = (slash && slash[1] != '\0') ? slash + 1 : o;
+        if (name[0] == '\0' || strcmp(name, "..") == 0)
+          name = "stats";
+        snprintf(storage[4], sizeof(storage[4]), "%s/%s", dir, name);
+      } else
+        snprintf(storage[4], sizeof(storage[4]), "%s/%s", dir, o);
+      si->out_path = storage[4];
+    } else
+      si->out_path = (char *)((o != NULL) ? o : "-");
   } else {
     si->train_path   = esl_opt_GetString(go, "--train_path");
     si->test_path    = esl_opt_GetString(go, "--test_path");
     si->val_path     = esl_opt_GetString(go, "--val_path");
     si->discard_path = esl_opt_GetString(go, "--discard_path");
+    si->out_path     = esl_opt_GetString(go, "-o");
   }
 }
 
@@ -252,17 +271,6 @@ process_commandline(int argc, char **argv, ESL_GETOPTS **ret_go, char **ret_qfil
   exit(status);
 }
 
-static int
-fill_merged_db(ESL_SQ_BLOCK *dst, ESL_SQ_BLOCK *db_1, ESL_SQ_BLOCK *db_2, ESL_ALPHABET *abc)
-{
-  dst->count = 0;
-  for (int i = 0; i < db_1->count; i++) add_seq(dst, db_1->list + i, abc);
-  if (db_2 != NULL) {
-    for (int i = 0; i < db_2->count; i++) add_seq(dst, db_2->list + i, abc);
-  }
-  return eslOK;
-}
-
 /**
  * @brief Main program: orchestrate database splitting workflow.
  *
@@ -289,8 +297,6 @@ main(int argc, char **argv)
   ESL_SQ_BLOCK    *test_db          = NULL;               /* test database              */
   ESL_SQ_BLOCK    *val_db           = NULL;               /* val database               */
   ESL_SQ_BLOCK    *qdb              = NULL;               /* query database             */
-  ESL_SQ_BLOCK    *check_a_db       = NULL;               /* merged check db for db_a   */
-  ESL_SQ_BLOCK    *check_b_db       = NULL;               /* merged check db for db_b   */
   ESL_SQ_BLOCK    *cdb              = NULL;               /* two-group candidate db     */
   ESL_SQ_BLOCK    *discard_db       = NULL;               /* batched discard writes     */
   ESL_SQ_BLOCK    *sqdb             = NULL;               /* sequence database to split */
@@ -314,19 +320,15 @@ main(int argc, char **argv)
   bool             suppress;                              /* Flag to suppress outputs   */
   int              Q_SIZE;                                /* Query chunk size           */
   double           current_assign_frac;                   /* Current train proportion   */
-  char            *train_file;                            /* Train sequence file name   */
-  char            *test_file;                             /* Test sequence file name    */
-  char            *val_file;                              /* Val sequence file name     */
   char            *out_file;                              /* Output file name           */
   char            *discard_file;                          /* Discard sequence file name */
-  FILE            *train_fp;                              /* Train sequence file ptr    */
-  FILE            *test_fp;                               /* Test sequence file ptr     */
   FILE            *discard_fp;                            /* Discard sequence file ptr  */
-  FILE            *val_fp;                                /* Val sequence file ptr      */
   int              len;                                   /* Calculate file name length */
   double           start_time;                            /* Keep track of start time   */
   double           elapsed_time;                          /* Elapsed time               */
   int              freq;                                  /* Freq of progress update    */
+  int              eff_test_limit;                        /* test_limit, offset if val merged into test */
+  int              eff_val_limit;                         /* val_limit, offset if test merged into val  */
 
   /* Set processor specific flags */
   impl_Init();
@@ -350,18 +352,26 @@ main(int argc, char **argv)
   si.pid_high     = esl_opt_GetReal    (go, "--phigh");
   si.cores        = esl_opt_GetInteger (go, "--cpu");
   si.E            = esl_opt_GetReal    (go, "-E");
-  si.db_size      = esl_opt_GetReal    (go, "-Z");
-  si.disable_val  = esl_opt_GetBoolean (go, "--disable_val");
   si.init_chunk   = esl_opt_GetInteger (go, "--init_chunk");
   si.test_limit   = esl_opt_GetInteger (go, "--test_limit");
   si.val_limit    = esl_opt_GetInteger (go, "--val_limit");
   si.task_id      = esl_opt_GetInteger (go, "--task_id");
-  resolve_output_paths(go, &si);
   suppress        = esl_opt_GetBoolean (go, "--suppress");
-  si.out_path     = esl_opt_GetString  (go, "-o");
+  /* -Z default in options[] is FALSE (NULL): esl_opt_GetReal would read atof(NULL). When -Z is
+   * unset (IsOn false), match E-value database size to --dbblock; otherwise use the given -Z. */
+  if (! esl_opt_IsOn(go, "-Z"))
+    si.db_size = esl_opt_GetInteger(go, "--dbblock");
+  else
+    si.db_size = (int) esl_opt_GetReal(go, "-Z");
+  resolve_output_paths(go, &si);
   si.out_fp       = NULL;
   si.early_stop   = TRUE;  /* The splitter does early stopping             */
   si.format       = 0;     /* Store ACCEPT/REJECT string                   */
+  si.train_skip_lo = -1;
+  si.train_skip_hi = -1;
+  si.merged_skip_lo = -1;
+  si.merged_skip_hi = -1;
+  si.merged_skip_in_test = 0;
 
   /* If caller declared input formats, decode them */
   if (esl_opt_IsOn(go, "--tformat")) {
@@ -434,49 +444,59 @@ main(int argc, char **argv)
   }
 
   /* Allocate memory for the val SQ_BLOCK */
-  if (!si.disable_val) {
-    val_db = esl_sq_CreateDigitalBlock((int) (si.val_limit+si.init_chunk), abc);
-    if (val_db == NULL) p7_Fail("Failed to allocate val database block");
-    
-    /* Check if we are loading an existing val db initially */
-    if (strcmp(esl_opt_GetString(go, "--load_val"), "-") != 0) {
-      char *fname = NULL;
-      fname = esl_opt_GetString(go, "--load_val");
-      ESL_SQFILE *fp = NULL;
-      status =  esl_sqfile_OpenDigital(abc, fname, dbformat, p7_SEQDBENV, &fp);
-      if      (status == eslENOTFOUND) p7_Fail("Failed to open val sequence database %s for reading\n",      fname);
-      else if (status == eslEFORMAT)   p7_Fail("Val sequence database file %s is empty or misformatted\n",   fname);
-      else if (status == eslEINVAL)    p7_Fail("Can't autodetect format of a stdin or .gz seqfile");
-      else if (status != eslOK)        p7_Fail("Unexpected error %d opening val sequence database file %s\n", status, fname);
-      
-      read_cust(fp, val_db);
-      if (status != eslOK) p7_Fail("Failed to read val sequences from database");
-      esl_sqfile_Close(fp);
-    }
+  val_db = esl_sq_CreateDigitalBlock((int) (si.val_limit+si.init_chunk), abc);
+  if (val_db == NULL) p7_Fail("Failed to allocate val database block");
+
+  /* Check if we are loading an existing val db initially */
+  if (strcmp(esl_opt_GetString(go, "--load_val"), "-") != 0) {
+    char *fname = NULL;
+    fname = esl_opt_GetString(go, "--load_val");
+    ESL_SQFILE *fp = NULL;
+    status =  esl_sqfile_OpenDigital(abc, fname, dbformat, p7_SEQDBENV, &fp);
+    if      (status == eslENOTFOUND) p7_Fail("Failed to open val sequence database %s for reading\n",      fname);
+    else if (status == eslEFORMAT)   p7_Fail("Val sequence database file %s is empty or misformatted\n",   fname);
+    else if (status == eslEINVAL)    p7_Fail("Can't autodetect format of a stdin or .gz seqfile");
+    else if (status != eslOK)        p7_Fail("Unexpected error %d opening val sequence database file %s\n", status, fname);
+
+    read_cust(fp, val_db);
+    if (status != eslOK) p7_Fail("Failed to read val sequences from database");
+    esl_sqfile_Close(fp);
   }
 
   /* Set initial cores and query chunk sizes */
   Q_SIZE = esl_opt_GetInteger(go, "--init_chunk");  /* Initial query set size        */
-  current_assign_frac = si.disable_val ? 0.5 : 0.33;  /* 50-50 or 33-33-33 to start  */
+  current_assign_frac = 0.33;  /* 33-33-33 triple phase until a limit is reached */
 
   /* Allocate memory for the query SQ_BLOCK */
   qdb = esl_sq_CreateDigitalBlock(Q_SIZE, abc); /* Allocate for max possible, not just Q_SIZE */
   if (qdb == NULL) p7_Fail("Failed to allocate query database block");
 
-  write_val = si.disable_val ? FALSE : TRUE;
+  write_val = TRUE;
   write_train = TRUE;
   write_test = TRUE;
-  test_done = (test_db->count >= si.test_limit);
-  val_done  = si.disable_val || (val_db != NULL && val_db->count >= si.val_limit);
+  eff_test_limit = si.test_limit;
+  eff_val_limit  = si.val_limit;
+  test_done = (test_db->count >= eff_test_limit);
+  val_done  = (val_db->count >= eff_val_limit);
   if (val_done) current_assign_frac = 0.5;
 
   /* If a preloaded set already meets a limit, persist canonical output immediately. */
   if (test_done && write_test) {
-    save_seqs(test_fp, si.test_path, si.task_id, test_db);
+    int skl = -1, skh = -1;
+    if (si.merged_skip_lo >= 0 && si.merged_skip_in_test) {
+      skl = si.merged_skip_lo;
+      skh = si.merged_skip_hi;
+    }
+    save_seqs(NULL, si.test_path, si.task_id, test_db, skl, skh);
     write_test = FALSE;
   }
   if (val_done && write_val) {
-    save_seqs(val_fp, si.val_path, si.task_id, val_db);
+    int skl = -1, skh = -1;
+    if (si.merged_skip_lo >= 0 && !si.merged_skip_in_test) {
+      skl = si.merged_skip_lo;
+      skh = si.merged_skip_hi;
+    }
+    save_seqs(NULL, si.val_path, si.task_id, val_db, skl, skh);
     write_val = FALSE;
   }
 
@@ -498,11 +518,9 @@ main(int argc, char **argv)
 
   /* Allocate max possible memory for results + 1 for \0 */
   ESL_ALLOC(results, (qdb->listSize+1)*sizeof(char));
-  check_a_db = esl_sq_CreateDigitalBlock(num_records + 1, abc);
-  check_b_db = esl_sq_CreateDigitalBlock(num_records + 1, abc);
   cdb = esl_sq_CreateDigitalBlock(qdb->listSize, abc);
   discard_db = esl_sq_CreateDigitalBlock(qdb->listSize, abc);
-  if (check_a_db == NULL || check_b_db == NULL || cdb == NULL || discard_db == NULL)
+  if (cdb == NULL || discard_db == NULL)
     p7_Fail("Failed to allocate temporary sequence buffers");
 
   /* Create seeded random generator for the rest of the code to use */
@@ -523,7 +541,7 @@ main(int argc, char **argv)
   /* Loop through all sequences in database */
   for (seq_ctr = 0; seq_ctr < num_records; seq_ctr++) {
     if (test_done && val_done) break;
-    
+
     if (seq_ctr < resume) continue; /* Resume code from said sequence number in db */
     
     else {
@@ -541,18 +559,14 @@ main(int argc, char **argv)
           else
             check_triple(qdb, test_db, val_db, train_db, discard_fp, &si, abc, go);
         } else if (!test_done && val_done) {
-          /* Test still growing: check train against (test+val), test against (train+val). */
-          fill_merged_db(check_a_db, test_db, val_db, abc);
-          fill_merged_db(check_b_db, train_db, val_db, abc);
+          /* test_db and train_db already include appended val after val limit (see housekeeping). */
           assign_train = (rnd_value < 0.5);
-          status = process_two_group_chunk(go, qdb, train_db, test_db, check_a_db, check_b_db,
+          status = process_two_group_chunk(go, qdb, train_db, test_db, test_db, train_db,
                                            cdb, discard_db, discard_fp, abc, &si, assign_train, results);
         } else if (test_done && !val_done) {
-          /* Val still growing: check train against (val+test), val against (train+test). */
-          fill_merged_db(check_a_db, val_db, test_db, abc);
-          fill_merged_db(check_b_db, train_db, test_db, abc);
+          /* val_db and train_db already include appended test if test finished first. */
           assign_train = (rnd_value < 0.5);
-          status = process_two_group_chunk(go, qdb, train_db, val_db, check_a_db, check_b_db,
+          status = process_two_group_chunk(go, qdb, train_db, val_db, val_db, train_db,
                                            cdb, discard_db, discard_fp, abc, &si, assign_train, results);
         }
       }
@@ -578,23 +592,60 @@ main(int argc, char **argv)
       }
 
       /* Housekeeping after reaching val limit */
-      if ((!val_done) && (val_db != NULL) && (val_db->count >= si.val_limit)) {
-        val_done = TRUE;
-        current_assign_frac = 0.5;
-        
+      if ((!val_done) && (val_db->count >= eff_val_limit)) {
         if (write_val) {
-          save_seqs(val_fp, si.val_path, si.task_id, val_db);
+          int skl = -1, skh = -1;
+          if (si.merged_skip_lo >= 0 && !si.merged_skip_in_test) {
+            skl = si.merged_skip_lo;
+            skh = si.merged_skip_hi;
+          }
+          save_seqs(NULL, si.val_path, si.task_id, val_db, skl, skh);
           write_val = FALSE;
         }
+        /* Val reached before test: embed val into train and test, then search uses those blocks. */
+        if (!test_done) {
+          si.train_skip_lo = train_db->count;
+          for (tmp_ctr = 0; tmp_ctr < val_db->count; tmp_ctr++)
+            add_seq(train_db, val_db->list + tmp_ctr, abc);
+          si.train_skip_hi = train_db->count;
+          si.merged_skip_lo = test_db->count;
+          for (tmp_ctr = 0; tmp_ctr < val_db->count; tmp_ctr++)
+            add_seq(test_db, val_db->list + tmp_ctr, abc);
+          si.merged_skip_hi = test_db->count;
+          si.merged_skip_in_test = 1;
+          /* test_db now includes a val copy tail; require more total count to reach real test_limit */
+          eff_test_limit += val_db->count;
+        }
+        val_done = TRUE;
+        current_assign_frac = 0.5;
       }
-      
+
       /* Housekeeping after reaching test limit */
-      if ((!test_done) && (test_db->count >= si.test_limit)) {
-        test_done = TRUE;
+      if ((!test_done) && (test_db->count >= eff_test_limit)) {
         if (write_test) {
-          save_seqs(test_fp, si.test_path, si.task_id, test_db);
+          int skl = -1, skh = -1;
+          if (si.merged_skip_lo >= 0 && si.merged_skip_in_test) {
+            skl = si.merged_skip_lo;
+            skh = si.merged_skip_hi;
+          }
+          save_seqs(NULL, si.test_path, si.task_id, test_db, skl, skh);
           write_test = FALSE;
         }
+        /* Test reached before val: embed test into train and val. */
+        if (!val_done) {
+          si.train_skip_lo = train_db->count;
+          for (tmp_ctr = 0; tmp_ctr < test_db->count; tmp_ctr++)
+            add_seq(train_db, test_db->list + tmp_ctr, abc);
+          si.train_skip_hi = train_db->count;
+          si.merged_skip_lo = val_db->count;
+          for (tmp_ctr = 0; tmp_ctr < test_db->count; tmp_ctr++)
+            add_seq(val_db, test_db->list + tmp_ctr, abc);
+          si.merged_skip_hi = val_db->count;
+          si.merged_skip_in_test = 0;
+          /* val_db now includes a test copy tail; require more total count to reach real val_limit */
+          eff_val_limit += test_db->count;
+        }
+        test_done = TRUE;
       }
     }
 
@@ -617,13 +668,12 @@ main(int argc, char **argv)
 
   /* Writing train sequences to a file */
   if (write_train) {
-    len = snprintf(NULL, 0, "%s_%d.fasta", si.train_path, si.task_id) + 1;
-    ESL_ALLOC(train_file, len*sizeof(char));
-    snprintf(train_file, len, "%s_%d.fasta", si.train_path, si.task_id);
-    if ((train_fp = fopen(train_file, "w")) == NULL) p7_Fail("Failed to open train file %s for writing\n", train_file);
-    
-    for(tmp_ctr=0; tmp_ctr < train_db->count; tmp_ctr++)
-      esl_sqio_Write(train_fp, train_db->list+tmp_ctr, eslSQFILE_FASTA, FALSE);
+    int skl = -1, skh = -1;
+    if (si.train_skip_lo >= 0) {
+      skl = si.train_skip_lo;
+      skh = si.train_skip_hi;
+    }
+    save_seqs(NULL, si.train_path, si.task_id, train_db, skl, skh);
   }
 
   if (strcmp(si.out_path, "-") == 0)
@@ -635,22 +685,33 @@ main(int argc, char **argv)
     if ((si.out_fp = fopen(out_file, "w")) == NULL) p7_Fail("Failed to open output file %s for writing\n", out_file);
   }
 
-  fprintf(si.out_fp,
-        "SledgeHMMER Stats:\n"
-        "---------------------\n"
-        "Train:       %d\n"
-        "Test(+Val):  %d\n"
-        "Discarded:   %d\n"
-        "Processed:   %d\n"
-        "Total:       %d\n"
-        "Time:        %.2f s\n\n",
-        train_db->count,
-        test_db->count + ((val_db != NULL) ? val_db->count : 0),
-        num_records - train_db->count - (test_db->count + ((val_db != NULL) ? val_db->count : 0)),
-        seq_ctr, num_records, elapsed_time);
+  {
+    int tr_emb = (si.train_skip_lo >= 0) ? (si.train_skip_hi - si.train_skip_lo) : 0;
+    int mg     = (si.merged_skip_lo >= 0) ? (si.merged_skip_hi - si.merged_skip_lo) : 0;
+    int logical_train = train_db->count - tr_emb;
+    int logical_test  = test_db->count;
+    int logical_val   = val_db->count;
+    if (si.merged_skip_lo >= 0 && si.merged_skip_in_test) logical_test -= mg;
+    if (si.merged_skip_lo >= 0 && !si.merged_skip_in_test) logical_val -= mg;
+
+    fprintf(si.out_fp,
+          "SledgeHMMER Stats:\n"
+          "---------------------\n"
+          "Train:       %d\n"
+          "Test:        %d\n"
+          "Val:         %d\n"
+          "Discarded:   %d\n"
+          "Processed:   %d\n"
+          "Total:       %d\n"
+          "Time:        %.2f s\n\n",
+          logical_train,
+          logical_test,
+          logical_val,
+          seq_ctr - logical_train - logical_test - logical_val,
+          seq_ctr, num_records, elapsed_time);
+  }
   
   /* Close open files */
-  fclose(train_fp);
   fclose(discard_fp);
 
   if (si.out_fp != stdout) {
@@ -659,17 +720,12 @@ main(int argc, char **argv)
   }
 
   /* Mop the floor and run away */
-  free(train_file);
   free(discard_file);
   free(results);
 
-  sledge_worker_pool_destroy();
-
   esl_sq_DestroyBlock(train_db);
   esl_sq_DestroyBlock(test_db);
-  if (val_db != NULL) esl_sq_DestroyBlock(val_db);
-  esl_sq_DestroyBlock(check_a_db);
-  esl_sq_DestroyBlock(check_b_db);
+  esl_sq_DestroyBlock(val_db);
   esl_sq_DestroyBlock(qdb);
   esl_sq_DestroyBlock(cdb);
   esl_sq_DestroyBlock(discard_db);

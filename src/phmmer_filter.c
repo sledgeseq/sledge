@@ -246,14 +246,22 @@ main(int argc, char **argv)
   si.qsize        = esl_opt_GetInteger (go, "--qsize");
   si.cores        = esl_opt_GetInteger (go, "--cpu");
   si.E            = esl_opt_GetReal    (go, "-E");
-  si.db_size      = esl_opt_GetReal    (go, "-Z");
   si.out_path     = esl_opt_GetString  (go, "-o");
   si.task_id      = esl_opt_GetInteger (go, "--task_id");
   si.format       = esl_opt_GetInteger (go, "--format");
   suppress        = esl_opt_GetBoolean (go, "--suppress");
+  if (! esl_opt_IsOn(go, "-Z"))
+    si.db_size = esl_opt_GetInteger(go, "--tblock");
+  else
+    si.db_size = (int) esl_opt_GetReal(go, "-Z");
   si.offset       = 0;
   si.out_fp       = NULL;
-  
+  si.train_skip_lo = -1;
+  si.train_skip_hi = -1;
+  si.merged_skip_lo = -1;
+  si.merged_skip_hi = -1;
+  si.merged_skip_in_test = 0;
+
   if(esl_opt_GetBoolean (go, "--all_hits"))
     si.early_stop = FALSE;
   else
@@ -391,8 +399,6 @@ main(int argc, char **argv)
   /* Mop the floor and leave */
   
   free(results);
-  
-  sledge_worker_pool_destroy();
 
   esl_sq_DestroyBlock(qdb);
   esl_sq_DestroyBlock(tdb);

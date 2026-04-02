@@ -1,4 +1,9 @@
-/* phmmer: search a protein sequence against a protein database
+/* sledge_dev_og.h — public API for sledge_dev_og.c (esl_threads worker model).
+ *
+ * Derived from sledge_dev.h: same structs and entry points as the current
+ * splitter/phmmer drivers expect, except:
+ *   - store_results matches the OG implementation (takes ESL_THREADS *).
+ *   - sledge_worker_pool_destroy is omitted (OG does not use a persistent pool).
  */
 #include <p7_config.h>
 
@@ -8,20 +13,20 @@
 
 #include "esl_getopts.h"
 #include "esl_sq.h"
+#include "esl_threads.h"
 
 #ifdef HMMER_THREADS
 #include <unistd.h>
-#include "esl_threads.h"
 #endif
 
 #include "hmmer.h"
 
 /* struct cfg_s : "Global" application configuration shared by all threads/processes
- * 
+ *
  * This structure is passed to routines within main.c, as a means of semi-encapsulation
  * of shared data amongst different parallel processes (threads or MPI processes).
  */
- struct cfg_s {
+struct cfg_s {
   char  *qfile;        /* query sequence file                                   */
   char  *dbfile;       /* database file                                         */
 
@@ -55,7 +60,6 @@ typedef struct {
   bool   early_stop;   /* Flag for early stopping                 */
   int    format;       /* Output format for filter                */
   bool   train_only;   /* Flag for train_only mode                */
-  bool   disable_val;  /* Flag to turn off validation mode        */
   bool   test_only;    /* Flag for test_only mode                 */
   bool   low_only;     /* Flag to stop after test/val limit       */
   float  train_frac;   /* Max train_fraction                      */
@@ -70,6 +74,11 @@ typedef struct {
   char  *out_path;     /* File path for output                    */
   FILE  *out_fp;       /* File ptr for output                     */
   int    offset;       /* Track current buffer size               */
+  int    train_skip_lo; /* if >= 0, omit [lo, hi) from train FASTA (embedded copy) */
+  int    train_skip_hi;
+  int    merged_skip_lo; /* embedded copy in test or val FASTA; see merged_skip_in_test */
+  int    merged_skip_hi;
+  int    merged_skip_in_test; /* 1=merged range is in test_db, 0=merged range is in val_db */
 } SLEDGE_INFO;
 
 typedef struct {
@@ -79,7 +88,7 @@ typedef struct {
   int               result_cap;  /* Allocated RESULT_INFO slots   */
   ESL_SQ_BLOCK     *sqdb;        /* Pointer to sequence database  */
   ESL_SQ_BLOCK     *qdb;         /* Pointer to query database     */
-  SLEDGE_INFO      *si;          /* Pointer to sledgehmmer info   */  
+  SLEDGE_INFO      *si;          /* Pointer to sledgehmmer info   */
   int               start;       /* Query start index             */
   int               num_queries; /* Number of queries to handle   */
 } WORKER_INFO;
@@ -139,7 +148,7 @@ extern void format_time(double seconds, char *buffer, size_t buffer_size);
 
 extern void print_progress(int current, int total, double elapsed);
 
-extern int save_seqs(FILE *fp, char *fpath, int fid,  ESL_SQ_BLOCK *db);
+extern int save_seqs(FILE *fp, char *fpath, int fid, ESL_SQ_BLOCK *db, int skip_lo, int skip_hi);
 
 extern int check_triple(ESL_SQ_BLOCK *qdb, ESL_SQ_BLOCK *db_1, ESL_SQ_BLOCK *db_2,
     ESL_SQ_BLOCK *db_3, FILE *discard_fp, SLEDGE_INFO *si, ESL_ALPHABET *abc,
@@ -151,15 +160,12 @@ extern int process_two_group_chunk(ESL_GETOPTS *go, ESL_SQ_BLOCK *qdb, ESL_SQ_BL
     ESL_ALPHABET *abc, SLEDGE_INFO *si, bool assign_a, char *results);
 
 extern int assign_master(ESL_GETOPTS *go, ESL_SQ_BLOCK *qdb, ESL_SQ_BLOCK *sqdb, SLEDGE_INFO *si, char *results);
-extern void sledge_worker_pool_destroy(void);
-
-extern void pipeline_thread(void *arg);
 
 extern int p7_Pipeline_cust(P7_PIPELINE *pli, P7_OPROFILE *om, P7_BG *bg, const ESL_SQ *sq,
   const ESL_SQ *qsq, P7_TOPHITS *hitlist, RESULT_INFO *result, SLEDGE_INFO *si);
 
 extern int p7_domaindef_cust(const ESL_SQ *sq, const ESL_SQ *qsq, P7_OPROFILE *om,
-  P7_OMX *oxf, P7_OMX *oxb, P7_OMX *fwd, P7_OMX *bck, 
+  P7_OMX *oxf, P7_OMX *oxb, P7_OMX *fwd, P7_OMX *bck,
   P7_DOMAINDEF *ddef, P7_BG *bg, int long_target,
   P7_BG *bg_tmp, float *scores_arr, float *fwd_emissions_arr,
   RESULT_INFO *result, float *nullsc, SLEDGE_INFO *si);
@@ -175,3 +181,5 @@ static int rescore_domain_cust(P7_DOMAINDEF *ddef, P7_OPROFILE *om, const ESL_SQ
   float *nullsc, SLEDGE_INFO *si);
 
 static int find_pid(P7_TRACE *tr, const ESL_SQ *sq, const ESL_SQ *qsq, float *pid, char *decision, SLEDGE_INFO *si);
+
+static void pipeline_thread(void *arg);

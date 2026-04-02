@@ -27,6 +27,14 @@
 
 set -euo pipefail
 
+# Two-pass rm for tmp/tool dirs (NFS / open handles). Failures do not abort the script (set -e).
+rm_rf_retry() {
+  [[ $# -eq 0 ]] && return 0
+  rm -rf "$@" || true
+  sleep 0.3
+  rm -rf "$@" || true
+}
+
 # --- Argument parsing: required --order, --config, --fixed-file, --db-file; optional --out-suffix ---
 ORDER=""
 CONFIG_FILE=""
@@ -340,7 +348,7 @@ run_mmseqs() {
       echo "Error: mmseqs search failed (Fixed -> DB)" >&2
       exit 1
     fi
-    rm -rf "${out_mm}/tmp_${TASK_ID}"/*
+    rm_rf_retry "${out_mm}/tmp_${TASK_ID}"/*
 
     if $MMSEQS search "${out_mm}/mm_db_${TASK_ID}/db" "${out_mm}/mm_fixed_${TASK_ID}/db" "${out_mm}/tmp_${TASK_ID}/db" "${out_mm}/tmp_db_fi_${TASK_ID}" --alignment-mode 2 --cov-mode 0 -c 0 -e "$e_db" --threads "$MMSEQS_CORES" --max-seqs "$MMSEQS_MAX_SEQS" >&2; then
       $MMSEQS convertalis "${out_mm}/mm_db_${TASK_ID}/db" "${out_mm}/mm_fixed_${TASK_ID}/db" "${out_mm}/tmp_${TASK_ID}/db" "${out_mm}/mm_hits_db_fi_${TASK_ID}.tsv" --format-mode 2 >&2
@@ -348,7 +356,7 @@ run_mmseqs() {
       echo "Error: mmseqs search failed (DB -> Fixed)" >&2
       exit 1
     fi
-    rm -rf "${out_mm}/tmp_${TASK_ID}"*
+    rm_rf_retry "${out_mm}/tmp_${TASK_ID}"*
     rm -rf "${out_mm}/mm_fixed_${TASK_ID}" "${out_mm}/mm_db_${TASK_ID}"
 
     if [[ "$REMOVE_TARGET" == "fixed" ]]; then
@@ -424,7 +432,8 @@ run_blast() {
     -out "${out_blast}/blast_hits_db_fi_${TASK_ID}.tsv" \
     -outfmt "6 qseqid sseqid pident length evalue bitscore" -evalue "$E_VALUE" -dbsize "$BLAST_DBSIZE" -max_target_seqs "$BLAST_MAX_TARGET_SEQS" -num_threads "$BLAST_CORES" >&2
 
-  rm -rf "${out_blast}/tmp_${TASK_ID}"* "${out_blast}/b_fixed_${TASK_ID}" "${out_blast}/b_db_${TASK_ID}"
+  rm_rf_retry "${out_blast}/tmp_${TASK_ID}"*
+  rm -rf "${out_blast}/b_fixed_${TASK_ID}" "${out_blast}/b_db_${TASK_ID}"
 
   (awk '{print $1}' "${out_blast}/blast_hits_db_fi_${TASK_ID}.tsv"
    awk '{print $2}' "${out_blast}/blast_hits_fi_db_${TASK_ID}.tsv") | sort -u > "$blast_hit_ids"

@@ -28,22 +28,7 @@
 #include "hmmer.h"
 #include "sledge_dev.h"
 
-/*
- * @def BUFFER_MAX
- * @brief Maximum buffer size for output streaming.
- */
-#ifndef BUFFER_MAX
-#define BUFFER_MAX 8192
-#endif
-
-/* Persistent worker pool reused across assign_master() calls. */
-static ESL_THREADS *g_threadObj  = NULL;
-static WORKER_INFO *g_workers    = NULL;
-static int          g_pool_cores = 0;
-
-static int  ensure_worker_pool(ESL_GETOPTS *go, int cores);
-static void reset_worker_state(void);
-static int  ensure_result_slots(WORKER_INFO *w, int needed_slots);
+void pipeline_thread(void *arg);
 
 /**
  * @brief Print a standardized program banner.
@@ -85,41 +70,41 @@ sledge_banner(FILE *fp, const char *progname, char *banner)
  *         the block capacity is too small for all sequences in the file, eslEINVAL
  *         if listSize is not positive, or another Easel error code.
  */
-int
-read_cust(ESL_SQFILE *sqfp, ESL_SQ_BLOCK *sqBlock)
-{
-  int status;
-
-  sqBlock->count = 0;
-
-  if (sqBlock->listSize <= 0)
-    return eslEINVAL;
-
-  while (sqBlock->count < sqBlock->listSize) {
-    status = esl_sqio_Read(sqfp, sqBlock->list + sqBlock->count);
-    if (status != eslOK)
-      break;
-    sqBlock->count++;
-  }
-
-  /* Treat EOF after at least one sequence as success for this read. */
-  if (status == eslEOF && sqBlock->count > 0)
-    status = eslOK;
-
-  /* Block is full: if the sequence source is not exhausted, the block was too small. */
-  if (status == eslOK && sqBlock->count == sqBlock->listSize) {
-    if (sqfp->format == eslSQFILE_NCBI) {
-      if ((uint32_t) sqfp->data.ncbi.index < sqfp->data.ncbi.num_seq)
-        return eslENOSPACE;
-    } else {
-      FILE *fp = sqfp->data.ascii.fp;
-      if (fp != NULL && !feof(fp))
-        return eslENOSPACE;
-    }
-  }
-
-  return status;
-}
+ int
+ read_cust(ESL_SQFILE *sqfp, ESL_SQ_BLOCK *sqBlock)
+ {
+   int status;
+ 
+   sqBlock->count = 0;
+ 
+   if (sqBlock->listSize <= 0)
+     return eslEINVAL;
+ 
+   while (sqBlock->count < sqBlock->listSize) {
+     status = esl_sqio_Read(sqfp, sqBlock->list + sqBlock->count);
+     if (status != eslOK)
+       break;
+     sqBlock->count++;
+   }
+ 
+   /* Treat EOF after at least one sequence as success for this read. */
+   if (status == eslEOF && sqBlock->count > 0)
+     status = eslOK;
+ 
+   /* Block is full: if the sequence source is not exhausted, the block was too small. */
+   if (status == eslOK && sqBlock->count == sqBlock->listSize) {
+     if (sqfp->format == eslSQFILE_NCBI) {
+       if ((uint32_t) sqfp->data.ncbi.index < sqfp->data.ncbi.num_seq)
+         return eslENOSPACE;
+     } else {
+       FILE *fp = sqfp->data.ascii.fp;
+       if (fp != NULL && !feof(fp))
+         return eslENOSPACE;
+     }
+   }
+ 
+   return status;
+ }
 
 /**
  * @brief Append a single sequence to an existing sequence block, growing it if needed.
@@ -181,8 +166,11 @@ append_target(RESULT_INFO *result, const char *target_id, float pid, float eval,
     result->capacity = new_capacity;
   }
 
-  /* Store non-owning target pointer and mark as REJECT. */
-  result->targets[result->n_targets] = (char *) target_id;
+  /* Add target information and mark as REJECT */
+  result->targets[result->n_targets] = strdup(target_id);
+  if (result->targets[result->n_targets] == NULL) {
+    return eslENORESULT;
+  }
   result->pids[result->n_targets]    = pid;
   result->evals[result->n_targets]   = eval;
   result->lengths[result->n_targets] = length;
@@ -205,98 +193,20 @@ destroy_info(WORKER_INFO *info, int num_cores)
 {
   /* Loop through and free all members */
   for (int i = 0; i < num_cores; ++i) {
-    for (int j = 0; j < info[i].result_cap; ++j) {
+    for (int j = 0; j < info[i].num_queries; ++j) {
+      for (int k = 0; k < info[i].result[j].n_targets; k++)
+        free(info[i].result[j].targets[k]);
       free(info[i].result[j].targets);
       free(info[i].result[j].pids);
       free(info[i].result[j].evals);
       free(info[i].result[j].lengths);
+      free(info[i].result[j].source);
     }
     free(info[i].result);
   }
 
   /* Now we can free the master object */
   free(info);
-
-  return eslOK;
-}
-
-void
-sledge_worker_pool_destroy(void)
-{
-  if (g_workers != NULL) {
-    destroy_info(g_workers, g_pool_cores);
-    g_workers = NULL;
-  }
-  if (g_threadObj != NULL) {
-    esl_threads_Destroy(g_threadObj);
-    g_threadObj = NULL;
-  }
-  g_pool_cores = 0;
-}
-
-static int
-ensure_result_slots(WORKER_INFO *w, int needed_slots)
-{
-  if (needed_slots <= w->result_cap) return eslOK;
-
-  RESULT_INFO *new_result = realloc(w->result, sizeof(*new_result) * needed_slots);
-  if (new_result == NULL) return eslEMEM;
-  w->result = new_result;
-
-  for (int i = w->result_cap; i < needed_slots; i++) {
-    w->result[i].decision  = ACCEPT;
-    w->result[i].pids      = malloc(INITIAL_HITS_CAPACITY * sizeof(float));
-    w->result[i].targets   = malloc(INITIAL_HITS_CAPACITY * sizeof(char *));
-    w->result[i].lengths   = malloc(INITIAL_HITS_CAPACITY * sizeof(int));
-    w->result[i].evals     = malloc(INITIAL_HITS_CAPACITY * sizeof(float));
-    w->result[i].n_targets = 0;
-    w->result[i].capacity  = INITIAL_HITS_CAPACITY;
-    w->result[i].max_pid   = -1.0f;
-    w->result[i].source    = NULL;
-    if (w->result[i].pids == NULL || w->result[i].targets == NULL ||
-        w->result[i].lengths == NULL || w->result[i].evals == NULL)
-      return eslEMEM;
-  }
-
-  w->result_cap = needed_slots;
-  return eslOK;
-}
-
-static void
-reset_worker_state(void)
-{
-  for (int i = 0; i < g_pool_cores; i++) {
-    g_workers[i].start       = 0;
-    g_workers[i].num_queries = 0;
-  }
-}
-
-static int
-ensure_worker_pool(ESL_GETOPTS *go, int cores)
-{
-  int status = eslOK;
-  if (cores <= 0) return eslEINVAL;
-
-  if (g_threadObj != NULL && cores <= g_pool_cores) return eslOK;
-
-  /* Grow pool by recreating with the new max core count. */
-  sledge_worker_pool_destroy();
-
-  g_threadObj = esl_threads_Create(&pipeline_thread);
-  if (g_threadObj == NULL) return eslEMEM;
-
-  g_workers = calloc(cores, sizeof(*g_workers));
-  if (g_workers == NULL) return eslEMEM;
-  g_pool_cores = cores;
-
-  for (int i = 0; i < g_pool_cores; i++) {
-    g_workers[i].go         = go;
-    g_workers[i].result     = NULL;
-    g_workers[i].result_cap = 0;
-    status = ensure_result_slots(&g_workers[i], 1);
-    if (status != eslOK) return status;
-    esl_threads_AddThread(g_threadObj, &g_workers[i]);
-  }
 
   return eslOK;
 }
@@ -346,35 +256,35 @@ store_results(ESL_THREADS *threadObj, SLEDGE_INFO *si, char *results)
       if (si->format == R_ALL) {
         /* Output ALL rejected hits for each query. */
         for (int hit = 0; hit < info->result[j].n_targets; hit++) {
-          int n = snprintf(line, sizeof(line), "%-15s %-15s %6.2f %7d %12.2E %8c\n",
-                           info->result[j].source,
-                           info->result[j].targets[hit],
-                           info->result[j].pids[hit],
-                           info->result[j].lengths[hit],
-                           exp(info->result[j].evals[hit]),
-                           info->result[j].decision);
-          if (n > 0) add_to_buffer(results, line, (size_t) n, si);
+          snprintf(line, sizeof(line), "%-15s %-15s %6.2f %7d %12.2E %8c\n",
+                   info->result[j].source,
+                   info->result[j].targets[hit],
+                   info->result[j].pids[hit],
+                   info->result[j].lengths[hit],
+                   exp(info->result[j].evals[hit]),
+                   info->result[j].decision);
+          add_to_buffer(results, line, strlen(line), si);
         }
       }
       else if (si->format == R_REJECTQ) {
         /* Only print IDs of accepted sequences */
         if (info->result[j].decision == REJECT) {
-          int n = snprintf(line, sizeof(line), "%s\n", info->result[j].source);
-          if (n > 0) add_to_buffer(results, line, (size_t) n, si);
+          snprintf(line, sizeof(line), "%s\n", info->result[j].source);
+          add_to_buffer(results, line, strlen(line), si);
         }
       }
       else if (si->format == R_REJECTT) {
         /* Only print IDs of failed comparisons */
         for (int hit = 0; hit < info->result[j].n_targets; hit++) {
-          int n = snprintf(line, sizeof(line), "%s\n", info->result[j].targets[hit]);
-          if (n > 0) add_to_buffer(results, line, (size_t) n, si);
+          snprintf(line, sizeof(line), "%s\n", info->result[j].targets[hit]);
+          add_to_buffer(results, line, strlen(line), si);
         }
       }
       else if (si->format == R_ACCEPT) {
         /* Only print IDs of accepted sequences */
         if (info->result[j].decision == ACCEPT) {
-          int n = snprintf(line, sizeof(line), "%s\n", info->result[j].source);
-          if (n > 0) add_to_buffer(results, line, (size_t) n, si);
+          snprintf(line, sizeof(line), "%s\n", info->result[j].source);
+          add_to_buffer(results, line, strlen(line), si);
         }
       }
       else {
@@ -461,35 +371,37 @@ print_progress(int current, int total, double elapsed)
 /**
  * @brief Save a sequence block to a FASTA file with an indexed filename.
  *
- * Each invocation writes db->count sequences to a file named fpath_fid.fasta.
+ * Writes to a file named fpath_fid.fasta. If skip_lo < 0, writes every sequence;
+ * otherwise skips indices in [skip_lo, skip_hi).
  *
- * @param[out] fp     File pointer (unused input, reopened internally).
+ * @param[out] fp     File pointer (unused input; file is opened internally).
  * @param[in]  fpath  Base filepath prefix.
  * @param[in]  fid    File index to append to the prefix.
  * @param[in]  db     Sequence block to write.
+ * @param[in]  skip_lo  Start of index range to omit, or -1 to write all.
+ * @param[in]  skip_hi  End (exclusive) of index range to omit; ignored if skip_lo < 0.
  *
  * @return eslOK on success, or exits on error.
  */
 int
-save_seqs(FILE *fp, char *fpath, int fid, ESL_SQ_BLOCK *db)
+save_seqs(FILE *fp, char *fpath, int fid, ESL_SQ_BLOCK *db, int skip_lo, int skip_hi)
 {
   int    status = eslOK;
   char  *fl = NULL;
   int    len = snprintf(NULL, 0, "%s_%d.fasta", fpath, fid) + 1;
 
-  /* Allocate and store filename */
   ESL_ALLOC(fl, len * sizeof(char));
   snprintf(fl, len, "%s_%d.fasta", fpath, fid);
 
-  /* Open file for writing */
   if ((fp = fopen(fl, "w")) == NULL)
     p7_Fail("Failed to open file %s for writing\n", fl);
 
-    /* Write all sequences */
-  for (int i = 0; i < db->count; i++)
+  for (int i = 0; i < db->count; i++) {
+    if (skip_lo >= 0 && i >= skip_lo && i < skip_hi)
+      continue;
     esl_sqio_Write(fp, db->list + i, eslSQFILE_FASTA, FALSE);
+  }
 
-  /* Free allocated memory and close the file */
   free(fl);
   fclose(fp);
 
@@ -679,63 +591,46 @@ check_triple(ESL_SQ_BLOCK *qdb, ESL_SQ_BLOCK *db_1, ESL_SQ_BLOCK *db_2, ESL_SQ_B
 int
 assign_master(ESL_GETOPTS *go, ESL_SQ_BLOCK *qdb, ESL_SQ_BLOCK *sqdb, SLEDGE_INFO *si, char *results)
 {
-  int status = eslOK;
-  int q_ctr  = 0;
+  ESL_STOPWATCH *timer     = NULL;
+  ESL_THREADS   *threadObj = NULL;
+  WORKER_INFO   *info      = NULL;
+  int            status    = eslOK;
+  int            q_ctr     = 0;
 
-  if (si->cores <= 0 || si->qsize <= 0) return eslEINVAL;
-
-  if (qdb->count == 0) {
-    if (si->format == R_STRING) results[0] = '\0';
-    return eslOK;
-  }
-
-  status = ensure_worker_pool(go, si->cores);
-  if (status != eslOK) goto ERROR;
-  reset_worker_state();
-
-  /* Assign db pointers and query ranges for active workers. */
+  ESL_ALLOC(info, sizeof(*info) * si->cores);
+  threadObj = esl_threads_Create(&pipeline_thread);
+  
+  /* Add db pointers and associated queries for each core */
   for (int i = 0; i < si->cores; i++) {
-    int nqueries = 0;
-
-    if (q_ctr < qdb->count) {
-      nqueries = (si->qsize < (qdb->count - q_ctr)) ? si->qsize : (qdb->count - q_ctr);
+    info[i].si    = si;
+    info[i].sqdb  = sqdb;
+    info[i].qdb   = qdb;
+    info[i].go    = go;
+    info[i].start = q_ctr;
+    if (si->qsize < qdb->count - q_ctr) {
+      info[i].num_queries = si->qsize;
+    } else {
+      info[i].num_queries = qdb->count - q_ctr;
     }
-
-    g_workers[i].si          = si;
-    g_workers[i].sqdb        = sqdb;
-    g_workers[i].qdb         = qdb;
-    g_workers[i].go          = go;
-    g_workers[i].start       = q_ctr;
-    g_workers[i].num_queries = nqueries;
-    status = ensure_result_slots(&g_workers[i], nqueries > 0 ? nqueries : 1);
-    if (status != eslOK) goto ERROR;
-
-    for (int j = 0; j < nqueries; j++) {
-      g_workers[i].result[j].decision  = ACCEPT;
-      g_workers[i].result[j].n_targets = 0;
-      g_workers[i].result[j].max_pid   = -1.0f;
-      g_workers[i].result[j].source    = NULL;
-    }
-    q_ctr += nqueries;
-  }
-  for (int i = si->cores; i < g_pool_cores; i++) {
-    g_workers[i].si          = si;
-    g_workers[i].sqdb        = sqdb;
-    g_workers[i].qdb         = qdb;
-    g_workers[i].go          = go;
-    g_workers[i].start       = 0;
-    g_workers[i].num_queries = 0;
+    q_ctr += info[i].num_queries;
+    ESL_ALLOC(info[i].result, info[i].num_queries * sizeof(RESULT_INFO));
+    esl_threads_AddThread(threadObj, &info[i]);
   }
 
-  /* Start and finish persistent workers. */
-  esl_threads_WaitForStart(g_threadObj);
-  esl_threads_WaitForFinish(g_threadObj);
+  /* Start and finish threads */
+  esl_threads_WaitForStart(threadObj);
+  esl_threads_WaitForFinish(threadObj);
 
-  /* Process results in requested format. */
-  status = store_results(g_threadObj, si, results);
+  /* Process all results in requested format */
+  status = store_results(threadObj, si, results);
+
+  /* Free memory and destroy threads */
+  destroy_info(info, si->cores);
+  esl_threads_Destroy(threadObj);
+
   return status;
 
-ERROR:
+ ERROR:
   return status;
 }
 
@@ -805,7 +700,11 @@ pipeline_thread(void *arg)
     ri->max_pid   = -1.0;
     ri->decision  = ACCEPT;
     ri->capacity  = INITIAL_HITS_CAPACITY;
-    ri->source    = qsq->name;
+    ri->source    = strdup(qsq->name);
+    ri->targets   = malloc(INITIAL_HITS_CAPACITY * sizeof(char*));
+    ri->pids      = malloc(INITIAL_HITS_CAPACITY * sizeof(float));
+    ri->evals     = malloc(INITIAL_HITS_CAPACITY * sizeof(float));
+    ri->lengths   = malloc(INITIAL_HITS_CAPACITY * sizeof(int));
 
     /* Build query profile */
     p7_SingleBuilder(bld, qsq, bg, NULL, NULL, NULL, &om);

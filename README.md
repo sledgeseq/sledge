@@ -100,6 +100,10 @@ You can still call the dispatcher directly if needed:
 ./install/install_external.sh /path/to/sledge
 ```
 
+**FASTA36 build (Linux and macOS):** The installer clones [fasta36](https://github.com/wrpearson/fasta36) (default **`FASTA36_REF` is `master`**) and applies **`install/patches/fasta36-gcc-prototypes.patch`**. That patch updates **13** upstream sources under `src/` for modern GCC/clang: core headers and mmap readers (`altlib.h`, `mm_file.h`, `mmgetaa.c`), `pssm_asn_subs.c` (C23 `bool` and full `parse_pssm_*` prototypes), `lsim4.h` (`stdbool.h` instead of `typedef int bool`), `map_db.c` (typed function pointers for `get_entry` / `get_ent_arr`), fastx/tfastx drops (`dropfx2.c`, `dropfz3.c`: alignment helpers, `lx_band` `ckalloc`, `kssort`, `global` / `small_global` / `global_up` / `global_down` with `const` sequence pointers where appropriate, `fatal`), related drops (`dropfs2.c`, `dropff2.c`, `dropnfa.c`: old-style `kssort` / `kpsort` / `krsort` / `savemax` converted to ANSI prototypes), `initfa.c` (`sortbest` ANSI, `get_lambda` allocation split so `-Walloc-size-larger-than` does not misfire), and `compacc2e.c` (safe `calloc` count for annotation sorting; **`mktemp` → `mkstemp`** on UNIX for the temp library DB path). All of these are required together; a partial patch can still leave K&R-style declarations or C23 `bool` clashes. The patch file is **part of this repository**; the system **`patch`** command must still be on your `PATH` (common on Linux and macOS; minimal containers may need the `patch` package). The patch is generated against **`master`**; GitHub’s default branch may differ (e.g. a release branch with different line layouts), so if you set `FASTA36_REF` to another branch or tag and the patch fails, regenerate the diff from a clean checkout of that revision or use `master`. If upstream changes the patched lines on `master`, refresh the patch from a clean checkout.
+
+The patch **file** ships with sledge under `install/patches/`; only the **`patch` executable** is a system dependency. If you ever need to support hosts without `patch`, you could vendor a static GNU `patch` (for example under `install/bin/`) and call that from the installers—nothing in the repo does this yet.
+
 **macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`) and builds FASTA36 from source. [Homebrew](https://brew.sh/) must be installed first; the script exits with a clear error if `brew` is not on your `PATH`.
 
 On Windows, run the PowerShell entrypoint (WSL2-backed flow):
@@ -163,7 +167,6 @@ sledge_filter --order pmbs --config pipeline.config --fixed-file test.fasta --db
 | `--test_limit <n>` | `75000` | Stop once at least this many sequences are assigned to **test**. |
 | `--val_limit <n>` | `10000` | Stop once at least this many are assigned to **validation** (unless disabled). |
 | `--init_chunk <n>` | `10` | Sequences considered for assignment at one go |
-| `--disable_val` | off | Do not create a validation split. |
 | `--seed <n>` | `42` | RNG seed (`0` = one-time random seed). |
 | `--suppress` | off | Disable progress bar. |
 | `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.). |
