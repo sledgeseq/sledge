@@ -52,13 +52,13 @@ Refer to the [external tools](#external-tools) section for installation through 
 ### 1) Clone and build core binaries
 
 ```bash
-git clone https://github.com/YOUR_ORG/sledge.git
+git clone https://github.com/sledgeseq/sledge.git
 cd sledge/ # adjust if your repo root differs
 ./configure   # detects CPU (SSE on x86_64, NEON on aarch64/arm64); writes build-config.mk
 make
 ```
 
-**Shell (bash vs zsh):** It does not matter whether you use bash or zsh as your login shell. `./configure` has a `#!/usr/bin/env bash` shebang, so it always runs under bash. The same commands work in Terminal with zsh.
+**Shell (bash vs zsh):** It does not matter whether you use bash or zsh as your login shell. `./configure` has a `#!/usr/bin/env bash`, so it always runs under bash. The same commands work in Terminal with zsh.
 
 **If you see “Permission denied” when running scripts:** your clone may be missing executable bits. Re-enable with:
 
@@ -181,7 +181,7 @@ sledge_filter --order pmbs --config pipeline.config --fixed-file test.fasta --db
 | Option | Default | Description |
 |--------|---------|---------------|
 | `-o <prefix>` | `-` | Prefix for stats / summary output files (e.g. `stats` → `stats_0.txt`). |
-| `-Z <n>` | *inferred from database* | Effective database size for E-value calculation. |
+| `-Z <n>` | *inferred from --dbblock* | Effective database size for E-value calculation. |
 | `--cpu <n>` | `1` | Worker threads. |
 | `--dbblock <n>` | `1000` | Number of sequences in database. |
 | `--test_limit <n>` | `75000` | Stop once at least this many sequences are assigned to **test**. |
