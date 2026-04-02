@@ -213,4 +213,24 @@
  
  int
  pro_dna(const unsigned char *prot_seq,  /* array with prot. seq. numbers*/
+--- a/src/map_db.c
++++ b/src/map_db.c
+@@ -61,7 +61,7 @@
+ 
+ #define LASTLIB 6
+ 
+-int (*get_entry) ();
++int (*get_entry)(unsigned char *, int, fseek_t *, fseek_t *);
+ 
+ int a_get_ent(unsigned char *, int, fseek_t *, fseek_t *);
+ int gbf_get_ent(unsigned char *, int, fseek_t *, fseek_t *);
+@@ -76,7 +76,7 @@
+ void newname(char *nname, char *oname, char *suff, int maxn);
+ void init_ascii0(int *xascii, char *sq_map);
+ 
+-int (*get_ent_arr[LASTLIB+1])()={a_get_ent, gbf_get_ent, NULL, NULL, NULL,
++int (*get_ent_arr[LASTLIB+1])(unsigned char *, int, fseek_t *, fseek_t *)={a_get_ent, gbf_get_ent, NULL, NULL, NULL,
+ 				 NULL, NULL};
+ 
+ fseek_t openlib(char *, int);
 
