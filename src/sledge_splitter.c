@@ -36,6 +36,8 @@
 #include "esl_stopwatch.h"
 
 #include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include "esl_threads.h"
 
 #include "hmmer.h"
@@ -189,6 +191,26 @@ resolve_output_paths(ESL_GETOPTS *go, SLEDGE_INFO *si)
     si->discard_path = esl_opt_GetString(go, "--discard_path");
     si->out_path     = esl_opt_GetString(go, "-o");
   }
+}
+
+/* Create --output_dir if missing. If the path exists, it must already be a directory (never replaced). */
+static int
+ensure_output_dir(const char *path)
+{
+  struct stat st;
+
+  if (path == NULL || path[0] == '\0')
+    return eslOK;
+  if (stat(path, &st) == 0) {
+    if (!S_ISDIR(st.st_mode))
+      p7_Fail("--output_dir %s exists but is not a directory\n", path);
+    return eslOK;
+  }
+  if (errno != ENOENT)
+    p7_Fail("cannot stat --output_dir %s: %s\n", path, strerror(errno));
+  if (mkdir(path, 0755) != 0)
+    p7_Fail("Failed to create output directory %s: %s\n", path, strerror(errno));
+  return eslOK;
 }
 
 /**
@@ -364,6 +386,8 @@ main(int argc, char **argv)
   else
     si.db_size = (int) esl_opt_GetReal(go, "-Z");
   resolve_output_paths(go, &si);
+  if (esl_opt_IsOn(go, "--output_dir"))
+    ensure_output_dir(esl_opt_GetString(go, "--output_dir"));
   si.out_fp       = NULL;
   si.early_stop   = TRUE;  /* The splitter does early stopping             */
   si.format       = 0;     /* Store ACCEPT/REJECT string                   */
@@ -676,6 +700,26 @@ main(int argc, char **argv)
     save_seqs(NULL, si.train_path, si.task_id, train_db, skl, skh);
   }
 
+  /* Database exhausted before test/val limits: write whatever was accumulated (same skip rules as at-limit saves). */
+  if (write_test && !test_done) {
+    int skl = -1, skh = -1;
+    if (si.merged_skip_lo >= 0 && si.merged_skip_in_test) {
+      skl = si.merged_skip_lo;
+      skh = si.merged_skip_hi;
+    }
+
+    save_seqs(NULL, si.test_path, si.task_id, test_db, skl, skh);
+  }
+  if (write_val && !val_done) {
+    int skl = -1, skh = -1;
+    if (si.merged_skip_lo >= 0 && !si.merged_skip_in_test) {
+      skl = si.merged_skip_lo;
+      skh = si.merged_skip_hi;
+    }
+
+    save_seqs(NULL, si.val_path, si.task_id, val_db, skl, skh);
+  }
+
   if (strcmp(si.out_path, "-") == 0)
     si.out_fp = stdout;
   else {
@@ -709,6 +753,14 @@ main(int argc, char **argv)
           logical_val,
           seq_ctr - logical_train - logical_test - logical_val,
           seq_ctr, num_records, elapsed_time);
+    if (!test_done)
+      fprintf(si.out_fp,
+          "Note: --test_limit effective target %d was not reached (database exhausted).\n",
+          eff_test_limit);
+    if (!val_done)
+      fprintf(si.out_fp,
+          "Note: --val_limit effective target %d was not reached (database exhausted).\n",
+          eff_val_limit);
   }
   
   /* Close open files */
