@@ -756,11 +756,11 @@ main(int argc, char **argv)
     if (!test_done)
       fprintf(si.out_fp,
           "Note: --test_limit effective target %d was not reached (database exhausted).\n",
-          eff_test_limit);
+          si.test_limit);
     if (!val_done)
       fprintf(si.out_fp,
           "Note: --val_limit effective target %d was not reached (database exhausted).\n",
-          eff_val_limit);
+          si.val_limit);
   }
   
   /* Close open files */
