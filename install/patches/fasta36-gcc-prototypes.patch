@@ -47,3 +47,66 @@
    aranlibm,lranlibm,NULL,NULL,NULL,vranlibm,vranlibm
  };
  #endif
+--- a/src/pssm_asn_subs.c
++++ b/src/pssm_asn_subs.c
+@@ -27,8 +27,40 @@
+ 
+ #include "defs.h"
+ 
+-int parse_pssm_asn();
+-int parse_pssm2_asn();
++struct asn_bstruct;
++
++int parse_pssm_asn(FILE *afd,
++	       long *gi,
++	       char *name,
++	       char *acc,
++	       char *descr,
++	       unsigned char **query,
++	       int *nq,
++	       int *n_rows,
++	       int *n_cols,
++	       double ***wfreqs,
++	       double ***freqs,
++	       int  ***iscores,
++	       int *pseudo_cnts,
++	       char *matrix,
++	       int *gap_open_p,
++	       int *gap_ext_p,
++	       double *lambda_p);
++int parse_pssm2_asn(struct asn_bstruct *asnp,
++		long *gi,
++		char *name,
++		char *acc,
++		char *descr,
++	       unsigned char **query,
++	       int *nq,
++	       int *n_rows,
++	       int *n_cols,
++	       double ***wfreqs,
++	       double ***freqs,
++	       int ***iscores,
++	       int *pseudo_cnts,
++	       char *matrix,
++	       double *lambda_p);
+ 
+ int
+ parse_pssm_asn_fa(FILE *afd, int *n_rows, int *n_cols,
+@@ -656,7 +688,7 @@
+ get_astr_userfld_data(struct asn_bstruct *asnp) {
+   double real;
+   long ival;
+-  int bool;
++  int bool_val;
+ 
+   ABPP = chk_asn_buf(asnp, 32);
+ 
+@@ -675,7 +707,7 @@
+     break;
+   case ASN_USERFLD_D_BOOL :
+     ABP_INC2;
+-    ABPP = get_astr_bool(asnp, &bool) + 2;
++    ABPP = get_astr_bool(asnp, &bool_val) + 2;
+     break;
+   case ASN_USERFLD_D_OS :
+     ABP_INC2;
