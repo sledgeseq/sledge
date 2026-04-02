@@ -24,6 +24,7 @@
 #include "esl_sq.h"
 #include "esl_sqio.h"
 #include <unistd.h>
+#include <time.h>
 #include "esl_threads.h"
 #include "hmmer.h"
 #include "sledge_dev.h"
@@ -224,7 +225,11 @@ add_to_buffer(char *buffer, char *line, size_t line_length, SLEDGE_INFO *si)
 {
   /* If buffer will overflow, flush it */
   if (si->offset + line_length >= BUFFER_MAX) {
+#if defined(__GLIBC__)
     fwrite_unlocked(buffer, 1, si->offset, si->out_fp);
+#else
+    fwrite(buffer, 1, si->offset, si->out_fp);
+#endif
     si->offset = 0;
   }
 
@@ -302,17 +307,24 @@ store_results(ESL_THREADS *threadObj, SLEDGE_INFO *si, char *results)
 }
 
 /**
- * @brief Get the current time in seconds using CLOCK_MONOTONIC_COARSE.
+ * @brief Get the current time in seconds from a monotonic clock.
  *
- * Used for coarse timing of pipeline stages.
+ * Uses Linux CLOCK_MONOTONIC_COARSE when available; otherwise CLOCK_MONOTONIC
+ * (macOS, BSD, etc.).
  *
  * @return Floating-point seconds since an arbitrary epoch.
  */
 double
-get_coarse_time()
+get_coarse_time(void)
 {
   struct timespec ts;
+#if defined(CLOCK_MONOTONIC_COARSE)
   clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+#elif defined(CLOCK_MONOTONIC)
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+  clock_gettime(CLOCK_REALTIME, &ts);
+#endif
 
   return ts.tv_sec + (ts.tv_nsec / 1.0e9);
 }

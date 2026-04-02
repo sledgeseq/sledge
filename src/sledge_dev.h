@@ -142,7 +142,7 @@ extern void add_to_buffer(char *buffer, char *line, size_t line_length, SLEDGE_I
 
 extern int store_results(ESL_THREADS *threadObj, SLEDGE_INFO *si, char *results);
 
-extern double get_coarse_time();
+extern double get_coarse_time(void);
 
 extern void format_time(double seconds, char *buffer, size_t buffer_size);
 
