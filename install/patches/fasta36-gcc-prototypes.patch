@@ -1,5 +1,5 @@
---- a/src/altlib.h
-+++ b/src/altlib.h
+--- a/src/altlib.h	2026-04-02 00:01:37.534112697 -0400
++++ b/src/altlib.h	2026-04-01 22:12:59.066778000 -0400
 @@ -85,7 +85,7 @@
  extern int ncbl2_getliba(unsigned char *, int, char *, int, fseek_t *, int *,
  	    struct lmf_str *, long *);
@@ -9,8 +9,8 @@
  #endif
  
  #ifdef MYSQL_DB
---- a/src/mm_file.h
-+++ b/src/mm_file.h
+--- a/src/mm_file.h	2026-04-02 00:01:37.542112683 -0400
++++ b/src/mm_file.h	2026-04-01 22:24:35.861788000 -0400
 @@ -58,7 +58,7 @@
  #include "defs.h"
  #endif
@@ -20,8 +20,8 @@
  
  struct lmf_str {
    FILE *libf;		/* sequence file being read */
---- a/src/mmgetaa.c
-+++ b/src/mmgetaa.c
+--- a/src/mmgetaa.c	2026-04-02 00:01:37.542112683 -0400
++++ b/src/mmgetaa.c	2026-04-01 22:24:42.639867000 -0400
 @@ -81,16 +81,18 @@
  
  /* mmap()ed functions */
@@ -47,8 +47,8 @@
    aranlibm,lranlibm,NULL,NULL,NULL,vranlibm,vranlibm
  };
  #endif
---- a/src/pssm_asn_subs.c
-+++ b/src/pssm_asn_subs.c
+--- a/src/pssm_asn_subs.c	2026-04-02 00:01:37.544112680 -0400
++++ b/src/pssm_asn_subs.c	2026-04-01 23:09:22.632436000 -0400
 @@ -27,8 +27,40 @@
  
  #include "defs.h"
@@ -110,8 +110,8 @@
      break;
    case ASN_USERFLD_D_OS :
      ABP_INC2;
---- a/src/lsim4.h
-+++ b/src/lsim4.h
+--- a/src/lsim4.h	2026-04-02 00:01:37.542112683 -0400
++++ b/src/lsim4.h	2026-04-01 23:15:21.239534000 -0400
 @@ -4,7 +4,7 @@
  
  /* global definitions, #defines, for lsim4.c */
@@ -121,9 +121,20 @@
  
  void *ckalloc(size_t amount, size_t size);
  
---- a/src/dropfx2.c
-+++ b/src/dropfx2.c
-@@ -1286,7 +1286,7 @@
+--- a/src/dropfx2.c	2026-04-02 00:01:37.538112690 -0400
++++ b/src/dropfx2.c	2026-04-01 23:59:35.274471000 -0400
+@@ -1222,9 +1222,7 @@
+ }
+ 
+ void
+-kssort (v, n)
+-struct savestr *v[];
+-int     n;
++kssort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+@@ -1286,7 +1284,7 @@
  	int width,         /* width for band alignment */
  	struct f_struct *f_str)
  {
@@ -132,7 +143,7 @@
    int i, j, bd, bd1, x1, sp, p1=0, p2=0, end_prot;
    int sc, del, best = 0, cd,ci, e1, e2, e3, cd1, cd2, cd3, f, gg;
    register int *wt;
-@@ -1473,9 +1473,27 @@
+@@ -1473,9 +1471,27 @@
  /* static int gop, gext, shift; */
  
  void *ckalloc(size_t);
@@ -141,12 +152,12 @@
 -static void init_row2(),  init_ROW();
 +static match_ptr small_global(int x, int y, int ex, int ey,
 +	     int **wgts, int gop, int gext, int shift,
-+	     unsigned char *dnap, unsigned char *pro,
++	     const unsigned char *dnap, const unsigned char *pro,
 +	     int N1, int N2, struct smgl_str *smgl_sp);
 +match_ptr global(int x, int y, int ex, int ey,
 +       int **wgts, int gop, int gext, int shift,
-+       unsigned char *dnap,
-+       unsigned char *pro,
++       const unsigned char *dnap,
++       const unsigned char *pro,
 +       int N1, int N2,
 +       st_ptr *up_stp, st_ptr *dn_stp, st_ptr *tp_stp,
 +       struct smgl_str *smgl_sp);
@@ -163,8 +174,58 @@
  
  int
  pro_dna(const unsigned char *prot_seq,	/* array with prot. seq. numbers*/
---- a/src/dropfz3.c
-+++ b/src/dropfz3.c
+@@ -1713,8 +1729,8 @@
+ global_up(st_ptr *row1, st_ptr *row2,
+ 	  int x, int y, int ex, int ey, 
+ 	  int **wgts, int gop, int gext, int shift,
+-	  unsigned char *dnap,
+-	  unsigned char *pro,
++	  const unsigned char *dnap,
++	  const unsigned char *pro,
+ 	  int N) {
+   int i, j, k, sc, e, e1, e2, e3, t, ci, cd, score, *wt;
+   st_ptr cur, last;
+@@ -1767,7 +1783,7 @@
+ global_down(st_ptr *row1, st_ptr *row2,
+ 	    int x, int y, int ex, int ey,
+ 	    int **wgts, int gop, int gext, int shift,
+-	    unsigned char *dnap, unsigned char *pro,
++	    const unsigned char *dnap, const unsigned char *pro,
+ 	    int N) {
+   int i, j, k, sc, del, *tmp, e,  t, e1,e2,e3, ci,cd, s1, s2, s3, *wt;
+   st_ptr cur, last;
+@@ -1858,8 +1874,8 @@
+ match_ptr
+ global(int x, int y, int ex, int ey, 
+        int **wgts, int gop, int gext, int shift,
+-       unsigned char *dnap, 
+-       unsigned char *pro,
++       const unsigned char *dnap, 
++       const unsigned char *pro,
+        int N1, int N2,
+        st_ptr *up_stp, st_ptr *dn_stp, st_ptr *tp_stp,
+        struct smgl_str *smgl_sp
+@@ -1986,7 +2002,7 @@
+ static match_ptr
+ small_global(int x, int y, int ex, int ey,
+ 	     int **wgts, int gop, int gext, int shift,
+-	     unsigned char *dnap, unsigned char *pro,
++	     const unsigned char *dnap, const unsigned char *pro,
+ 	     int N1, int N2, struct smgl_str *smgl_sp) {
+ 
+   /* int C[SGW1+1][SGW2+1], st[SGW1+1][SGW2+1], D[SGW2+7], I[SGW2+1]; */
+@@ -2211,8 +2227,7 @@
+ 
+ 
+ /* fatal - print message and die */
+-void fatal(msg)
+-char *msg;
++void fatal(char *msg)
+ {
+ 	fprintf(stderr, "%s\n", msg);
+ 	exit(1);
+--- a/src/dropfz3.c	2026-04-02 00:01:37.539112688 -0400
++++ b/src/dropfz3.c	2026-04-01 23:59:54.058429000 -0400
 @@ -1328,9 +1328,7 @@
  }
  
@@ -196,11 +257,11 @@
 -static void init_row2(), init_ROW();
 +static match_ptr small_global(int x, int y, int ex, int ey,
 +	     int **wgts, int gop, int gext,
-+	     unsigned char *dnap, unsigned char *pro,
++	     const unsigned char *dnap, const unsigned char *pro,
 +	     int N1, int N2, struct f_struct *f_str);
 +match_ptr global(int x, int y, int ex, int ey,
 +       int **wgts, int gop, int gext,
-+       unsigned char *dnap, unsigned char *pro, int N1, int N2,
++       const unsigned char *dnap, const unsigned char *pro, int N1, int N2,
 +       struct f_struct *f_str);
 +static int local_align(int *x, int *y, int *ex, int *ey,
 +	    int **wgts, int gop, int gext,
@@ -213,8 +274,54 @@
  
  int
  pro_dna(const unsigned char *prot_seq,  /* array with prot. seq. numbers*/
---- a/src/map_db.c
-+++ b/src/map_db.c
+@@ -1815,7 +1824,7 @@
+ global_up(st_ptr *row1, st_ptr *row2, 
+ 	  int x, int y, int ex, int ey, 
+ 	  int **wgts, int gop, int gext,
+-	  unsigned char *dnap, unsigned char *pro, 
++	  const unsigned char *dnap, const unsigned char *pro, 
+ 	  int N, struct f_struct *f_str)
+ {
+   int i, j, k, sc, e, e1, e2, e3, t, ci, cd, score;
+@@ -1864,7 +1873,7 @@
+ global_down(st_ptr *row1, st_ptr *row2,
+ 	    int x, int y, int ex, int ey, 
+ 	    int **wgts, int gop, int gext,
+-	    unsigned char *dnap, unsigned char *pro,
++	    const unsigned char *dnap, const unsigned char *pro,
+ 	    int N, struct f_struct *f_str)
+ {
+   int i, j, k, sc, del, *tmp, e,  t, e1,e2,e3, ci,cd, score;
+@@ -1956,7 +1965,7 @@
+ match_ptr
+ global(int x, int y, int ex, int ey,
+        int **wgts, int gop, int gext,
+-       unsigned char *dnap, unsigned char *pro, int N1, int N2,
++       const unsigned char *dnap, const unsigned char *pro, int N1, int N2,
+        struct f_struct *f_str)
+ {
+   int m;
+@@ -2071,7 +2080,7 @@
+ static match_ptr
+ small_global(int x, int y, int ex, int ey, 
+ 	     int **wgts, int gop, int gext,
+-	     unsigned char *dnap, unsigned char *pro,
++	     const unsigned char *dnap, const unsigned char *pro,
+ 	     int N1, int N2, struct f_struct *f_str) {
+ 
+   /* int C[SGW1+1][SGW2+1], st[SGW1+1][SGW2+1], D[SGW2+7], I[SGW2+1]; */
+@@ -2274,8 +2283,7 @@
+ 
+ /* fatal - print message and die */
+ void
+-fatal(msg)
+-     char *msg;
++fatal(char *msg)
+ {
+   fprintf(stderr, "%s\n", msg);
+   exit(1);
+--- a/src/map_db.c	2026-04-02 00:01:37.542112683 -0400
++++ b/src/map_db.c	2026-04-01 23:51:24.985069000 -0400
 @@ -61,7 +61,7 @@
  
  #define LASTLIB 6
@@ -233,4 +340,171 @@
  				 NULL, NULL};
  
  fseek_t openlib(char *, int);
-
+--- a/src/initfa.c	2026-04-02 00:01:37.541112685 -0400
++++ b/src/initfa.c	2026-04-02 00:01:28.435682000 -0400
+@@ -2044,9 +2044,7 @@
+ #endif
+ 
+ /* this function is almost never called, thus a slow shell sort */
+-void sortbest (bptr, nbest, irelv)
+-struct beststr **bptr;
+-int nbest, irelv;
++void sortbest(struct beststr **bptr, int nbest, int irelv)
+ {
+     int gap, i, j;
+     struct beststr *tmp;
+@@ -2066,9 +2064,7 @@
+ 
+ #else
+ /* this function is almost never called, thus a slow shell sort */
+-void sortbest (bptr, nbest, irelv)
+-struct beststr **bptr;
+-int nbest, irelv;
++void sortbest(struct beststr **bptr, int nbest, int irelv)
+ {
+     int gap, i, j;
+     struct beststr *tmp;
+@@ -2220,11 +2216,22 @@
+   }
+ 
+   /*  fprintf(stderr, "min: %d\tmax:%d\n", min, max); */
+-  
+-  if (max > 1023 || min < -1024 || ((pr = (double *) calloc(max - min + 1, sizeof(double))) == NULL)) {
++
++  if (max > 1023 || min < -1024) {
+     fprintf(stderr, "*** ERROR [%s:%d] - Couldn't allocate memory for score probabilities: %d - %d\n", __FILE__, __LINE__, max,min);
+     exit(1);
+   }
++  {
++    int n_pr = max - min + 1;
++    if (n_pr < 1 || n_pr > 4096) {
++      fprintf(stderr, "*** ERROR [%s:%d] - invalid PAM score range for lambda: min %d max %d\n", __FILE__, __LINE__, min, max);
++      exit(1);
++    }
++    if ((pr = (double *) calloc((size_t)n_pr, sizeof(double))) == NULL) {
++      fprintf(stderr, "*** ERROR [%s:%d] - Couldn't allocate memory for score probabilities: %d - %d\n", __FILE__, __LINE__, max,min);
++      exit(1);
++    }
++  }
+ 
+   tot = (double) rrtotal * (double) rrtotal * (double) n0;
+   for (i = ioff ; i < n0 ; i++) {
+--- a/src/compacc2e.c	2026-04-02 00:01:37.537112692 -0400
++++ b/src/compacc2e.c	2026-04-01 23:59:13.618127000 -0400
+@@ -1579,7 +1579,19 @@
+   }
+ 
+   SAFE_STRNCAT(lib_db_file,"lib_db_XXXXXX",MAX_STR);
++#if defined(UNIX)
++  {
++    int _lib_db_fd = mkstemp(lib_db_file);
++    if (_lib_db_fd < 0) {
++      fprintf(stderr,"*** ERROR [%s:%d] - [build_lib_db] mkstemp failed for %s\n",
++	      __FILE__, __LINE__, lib_db_file);
++      goto no_lib;
++    }
++    close(_lib_db_fd);
++  }
++#else
+   mktemp(lib_db_file);
++#endif
+   lib_db_str_len = strlen(lib_db_file)+1;
+ 
+   /* check for indirect */
+@@ -2097,7 +2109,12 @@
+     tmp_ann_entry_arr = (struct annot_entry *)realloc(tmp_ann_entry_arr, (n_annot+1)*sizeof(struct annot_entry));
+ 
+     /* provide sorted array */
+-    if ((s_tmp_ann_entry_arr = (struct annot_entry **)calloc((n_annot+1),sizeof(struct annot_entry *)))==NULL) {
++    if (n_annot < 0 || n_annot >= INT_MAX) {
++      fprintf(stderr,"*** ERROR [%s:%d] -- next_annot_entry(%s) - annotation count out of range: %d",
++	      __FILE__,__LINE__, annot_acc, n_annot);
++      return NULL;
++    }
++    if ((s_tmp_ann_entry_arr = (struct annot_entry **)calloc((size_t)n_annot + 1u, sizeof(struct annot_entry *)))==NULL) {
+       fprintf(stderr,"*** ERROR [%s:%d] -- next_annot_entry(%s) -  cannot alloc s_tmp_ann_entry_arr[%d]",
+ 	      __FILE__,__LINE__, annot_acc, n_annot+1);
+       return NULL;
+--- a/src/dropfs2.c	2026-04-02 00:01:37.538112690 -0400
++++ b/src/dropfs2.c	2026-04-02 00:00:00.358827000 -0400
+@@ -1274,9 +1274,7 @@
+ }
+ 
+ void
+-kssort (v, n)
+-struct savestr *v[];
+-int     n;
++kssort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+@@ -1294,9 +1292,7 @@
+ }
+ 
+ void
+-kpsort (v, n)
+-struct savestr *v[];
+-int     n;
++kpsort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+@@ -1326,9 +1322,7 @@
+ /* sorts alignments from right to left (back to front) based on stop */
+ 
+ void
+-krsort (v, n)
+-struct savestr *v[];
+-int     n;
++krsort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+--- a/src/dropff2.c	2026-04-02 00:01:37.538112690 -0400
++++ b/src/dropff2.c	2026-04-02 00:00:03.515277000 -0400
+@@ -694,9 +694,7 @@
+ }
+ 
+ void
+-savemax (dptr, f_str)
+-  register struct dstruct *dptr;
+-  struct f_struct *f_str;
++savemax(register struct dstruct *dptr, struct f_struct *f_str)
+ {
+    register int dpos;
+    register struct savestr *vmptr;
+@@ -1115,9 +1113,7 @@
+ 	 }
+ }
+ void
+-kpsort (v, n)
+-struct savestr *v[];
+-int     n;
++kpsort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+@@ -1137,9 +1133,7 @@
+ /* sorts alignments from right to left (back to front) based on stop */
+ 
+ void
+-krsort (v, n)
+-struct savestr *v[];
+-int     n;
++krsort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
+--- a/src/dropnfa.c	2026-04-02 00:01:37.539112688 -0400
++++ b/src/dropnfa.c	2026-04-02 00:00:05.190567000 -0400
+@@ -1089,9 +1089,7 @@
+ }
+ 
+ void
+-kssort (v, n)
+-struct savestr *v[];
+-int     n;
++kssort(struct savestr *v[], int n)
+ {
+    int     gap, i, j;
+    struct savestr *tmp;
