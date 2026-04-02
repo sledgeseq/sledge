@@ -60,7 +60,20 @@ make
 
 **Shell (bash vs zsh):** It does not matter whether you use bash or zsh as your login shell. `./configure` has a `#!/usr/bin/env bash` shebang, so it always runs under bash. The same commands work in Terminal with zsh.
 
-**If you see “Permission denied” when running `./configure`:** the file may not be executable in your clone (e.g. checkout without the executable bit). Fix with `chmod +x configure`, or run `bash configure` (no execute bit needed).
+**If you see “Permission denied” when running scripts:** your clone may be missing executable bits. Re-enable with:
+
+```bash
+chmod +x configure install/install_external.sh install/macos/install_external_macos.sh
+```
+
+or
+
+```bash
+chmod +x configure install/install_external.sh install/linux/install_external_linux.sh
+```
+
+
+You can also run scripts via `bash <script>` as a fallback (for example, `bash configure`).
 
 Re-run `./configure` after changing machines or if you want to force a backend (`./configure --with-impl=sse` or `--with-impl=neon`). `make distclean` removes `build-config.mk` as well as build products.
 
