@@ -121,3 +121,46 @@
  
  void *ckalloc(size_t amount, size_t size);
  
+--- a/src/dropfx2.c
++++ b/src/dropfx2.c
+@@ -1286,7 +1286,7 @@
+ 	int width,         /* width for band alignment */
+ 	struct f_struct *f_str)
+ {
+-  void *ckalloc();
++  void *ckalloc(size_t);
+   int i, j, bd, bd1, x1, sp, p1=0, p2=0, end_prot;
+   int sc, del, best = 0, cd,ci, e1, e2, e3, cd1, cd2, cd3, f, gg;
+   register int *wt;
+@@ -1473,9 +1473,27 @@
+ /* static int gop, gext, shift; */
+ 
+ void *ckalloc(size_t);
+-static match_ptr small_global(), global();
+-static int local_align(), find_best();
+-static void init_row2(),  init_ROW();
++static match_ptr small_global(int x, int y, int ex, int ey,
++	     int **wgts, int gop, int gext, int shift,
++	     unsigned char *dnap, unsigned char *pro,
++	     int N1, int N2, struct smgl_str *smgl_sp);
++match_ptr global(int x, int y, int ex, int ey,
++       int **wgts, int gop, int gext, int shift,
++       unsigned char *dnap,
++       unsigned char *pro,
++       int N1, int N2,
++       st_ptr *up_stp, st_ptr *dn_stp, st_ptr *tp_stp,
++       struct smgl_str *smgl_sp);
++static int local_align(int *x, int *y, int *ex, int *ey,
++	    int **wgts, int gop, int gext, int shift,
++	    const unsigned char *dnap, int ld,
++	    const unsigned char *pro,  int lp,
++	    st_ptr up, st_ptr down);
++static int find_best(st_ptr up, st_ptr down,
++	  int *m1, int *m2,
++	  int ld, int y, int gop);
++static void init_row2(int *row, int ld);
++static void init_ROW(st_ptr row, int ld);
+ 
+ int
+ pro_dna(const unsigned char *prot_seq,	/* array with prot. seq. numbers*/
+
