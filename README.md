@@ -58,6 +58,10 @@ cd sledge/ # adjust if your repo root differs
 make
 ```
 
+**Shell (bash vs zsh):** It does not matter whether you use bash or zsh as your login shell. `./configure` has a `#!/usr/bin/env bash` shebang, so it always runs under bash. The same commands work in Terminal with zsh.
+
+**If you see “Permission denied” when running `./configure`:** the file may not be executable in your clone (e.g. checkout without the executable bit). Fix with `chmod +x configure`, or run `bash configure` (no execute bit needed).
+
 Re-run `./configure` after changing machines or if you want to force a backend (`./configure --with-impl=sse` or `--with-impl=neon`). `make distclean` removes `build-config.mk` as well as build products.
 
 Executables land in `bin/`:

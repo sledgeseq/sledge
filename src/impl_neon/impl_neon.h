@@ -352,22 +352,7 @@ extern int p7_ViterbiScore (const ESL_DSQ *dsq, int L, const P7_OPROFILE *om, P7
 static inline void
 impl_Init(void)
 {
-#ifdef HAVE_FLUSH_ZERO_MODE
-  /* In order to avoid the performance penalty dealing with sub-normal
-   * values in the floating point calculations, set the processor flag
-   * so sub-normals are "flushed" immediately to zero.
-   */
-  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-#endif
-
-#ifdef _PMMINTRIN_H_INCLUDED
-  /*
-   * FLUSH_ZERO doesn't necessarily work in non-SIMD calculations
-   * (yes on 64-bit, maybe not of 32-bit). This ensures that those
-   * scalar calculations will agree across architectures.
-   * (See TW notes  2012/0106_printf_underflow_bug/00NOTES for details)
-   */
-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-#endif
+  /* NEON path only: do not use x86 _MM_SET_FLUSH_ZERO_MODE / DAZ intrinsics here.
+   * (Copy-paste from impl_sse is wrong for this header; flush/denormal control is x86-specific.) */
 }
 #endif /* P7_IMPL_NEON_INCLUDED */
