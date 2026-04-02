@@ -110,3 +110,14 @@
      break;
    case ASN_USERFLD_D_OS :
      ABP_INC2;
+--- a/src/lsim4.h
++++ b/src/lsim4.h
+@@ -4,7 +4,7 @@
+ 
+ /* global definitions, #defines, for lsim4.c */
+ 
+-typedef int bool;
++#include <stdbool.h>
+ 
+ void *ckalloc(size_t amount, size_t size);
+ 
