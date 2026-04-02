@@ -84,8 +84,10 @@ case "${IMPL}" in
     SIMD_CFLAGS="-msse2"
     ;;
   neon)
+    # -mfpu=neon is for 32-bit ARM (GCC). Do not match arm64 — that prefix matches arm* and
+    # breaks Apple/clang (aarch64 always has NEON; -mfpu is invalid for arm64-apple-darwin).
     case "${machine}" in
-      armv7*|armv6*|arm*)
+      armv7*|armv6*|armv5*|armv4*)
         SIMD_CFLAGS="-mfpu=neon"
         ;;
       *)
