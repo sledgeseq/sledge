@@ -163,4 +163,34 @@
  
  int
  pro_dna(const unsigned char *prot_seq,	/* array with prot. seq. numbers*/
+--- a/src/dropfz3.c
++++ b/src/dropfz3.c
+@@ -1595,11 +1595,22 @@
+ typedef struct { int i,j;} state;
+ typedef state *state_ptr;
+ 
+-
+-void *ckalloc();
+-static match_ptr small_global(), global();
+-static int local_align(), find_best();
+-static void init_row2(), init_ROW();
++static match_ptr small_global(int x, int y, int ex, int ey,
++	     int **wgts, int gop, int gext,
++	     unsigned char *dnap, unsigned char *pro,
++	     int N1, int N2, struct f_struct *f_str);
++match_ptr global(int x, int y, int ex, int ey,
++       int **wgts, int gop, int gext,
++       unsigned char *dnap, unsigned char *pro, int N1, int N2,
++       struct f_struct *f_str);
++static int local_align(int *x, int *y, int *ex, int *ey,
++	    int **wgts, int gop, int gext,
++	    const unsigned char *dnap, int ld,
++	    const unsigned char *pro, int lp,
++	    struct f_struct *f_str);
++static int find_best(st_ptr up, st_ptr down, int *m1, int *m2, int ld, int y, int gop);
++static void init_row2(int *row, int ld);
++static void init_ROW(st_ptr row, int ld);
+ 
+ int
+ pro_dna(const unsigned char *prot_seq,  /* array with prot. seq. numbers*/
 
