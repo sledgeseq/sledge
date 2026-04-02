@@ -11,6 +11,8 @@ endif
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 OS ?= $(UNAME_S)
+# Darwin: avoid linking straight into bin/ (codesign/Gatekeeper); link to tmp under BUILD, codesign, then install.
+IS_MACOS := $(if $(filter Darwin,$(UNAME_S)),1,)
 EXE :=
 ifeq ($(OS),Windows_NT)
   EXE := .exe
@@ -77,6 +79,29 @@ $(BUILD)/libeasel_min.a: $(EASEL_OBJS)
 	$(AR) rcs $@ $^
 	$(RANLIB) $@
 
+ifeq ($(IS_MACOS),1)
+$(BIN)/sledge_splitter$(EXE): $(BUILD)/src/sledge_splitter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/sledge_splitter.XXXXXX"); \
+	$(CC) $(CFLAGS) $(LDFLAGS) -o "$$t" $^ $(LDLIBS) && \
+	chmod +x "$$t" && \
+	codesign --force --sign - "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+
+$(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/phmmer_filter.XXXXXX"); \
+	$(CC) $(CFLAGS) $(LDFLAGS) -o "$$t" $^ $(LDLIBS) && \
+	chmod +x "$$t" && \
+	codesign --force --sign - "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+
+$(BIN)/sledge_filter: $(ROOT)/src/sledge_filter.sh
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/sledge_filter.XXXXXX"); \
+	cp $< "$$t" && chmod +x "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+else
 $(BIN)/sledge_splitter$(EXE): $(BUILD)/src/sledge_splitter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -89,6 +114,7 @@ $(BIN)/sledge_filter: $(ROOT)/src/sledge_filter.sh
 	@mkdir -p $(dir $@)
 	cp $< $@
 	chmod +x $@
+endif
 
 # SIMD intrinsics for impl_* and Easel vector math
 $(BUILD)/src/$(IMPLDIR)/%.o: $(ROOT)/src/$(IMPLDIR)/%.c

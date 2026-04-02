@@ -130,6 +130,7 @@ if [[ "${SKIP_BLAST:-0}" != "1" ]]; then
 fi
 
 if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
+  need_cmd codesign
   echo "[install_external_macos] Building FASTA36..."
   fasta_src="${WORKDIR}/fasta36"
   rm -rf "${fasta_src}" "${EXTERNAL}/fasta36-src"
@@ -151,8 +152,20 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   done
   popd >/dev/null
   [[ "${built}" -eq 1 ]] || die "fasta36 build failed for macOS (${MAC_ARCH})"
-  [[ -x "${EXTERNAL}/fasta36-src/bin/ssearch36" ]] || die "ssearch36 missing after build"
-  ln -sf "${EXTERNAL}/fasta36-src/bin/ssearch36" "${EXTERNAL}/fasta36/bin/ssearch36"
+  BUILT_SSEARCH="${EXTERNAL}/fasta36-src/bin/ssearch36"
+  BIN="${EXTERNAL}/fasta36/bin"
+  [[ -f "${BUILT_SSEARCH}" ]] || die "ssearch36 missing after build"
+  # Build outputs written straight into bin/ confuse Gatekeeper/codesign; stage via tmp, sign, then install.
+  tmp_exe="$(mktemp "${TMPDIR:-/tmp}/ssearch36.XXXXXX")"
+  cleanup_tmp() { rm -f "${tmp_exe}"; }
+  trap cleanup_tmp EXIT
+  cp "${BUILT_SSEARCH}" "${tmp_exe}"
+  chmod +x "${tmp_exe}"
+  codesign --force --sign - "${tmp_exe}" || die "codesign failed for ssearch36 (tmp ${tmp_exe})"
+  cp "${tmp_exe}" "${BIN}/ssearch36"
+  chmod +x "${BIN}/ssearch36"
+  cleanup_tmp
+  trap - EXIT
 fi
 
 echo ""
