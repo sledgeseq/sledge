@@ -1,8 +1,10 @@
 # Build artifacts and local binaries
 /bin/
 /build/
+/dev/
 /external_tools/
 /results/
+/build-config.mk
 # Test run logs and artifacts (see install/test_installation.sh)
 /install/info/
 
